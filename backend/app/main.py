@@ -54,6 +54,76 @@ def health() -> dict[str, Any]:
     }
 
 
+@app.get("/documents")
+def list_documents() -> dict[str, Any]:
+    with SessionLocal() as session:
+        documents = session.query(Document).order_by(Document.upload_time.desc()).all()
+
+    serialized = []
+    for document in documents:
+        extracted_json = document.extracted_json or {}
+        review_json = document.review_json or {}
+        serialized.append(
+            {
+                "document_id": document.id,
+                "filename": document.filename,
+                "document_type": document.document_type,
+                "status": document.status,
+                "file_type": document.file_type,
+                "upload_time": document.upload_time.isoformat() if document.upload_time else None,
+                "confidence": document.confidence_scores or {},
+                "validation": extracted_json.get("validation", {}),
+                "extracted_fields": extracted_json.get("extracted_fields", {}),
+                "review_json": review_json,
+                "raw_text": document.raw_text,
+            }
+        )
+
+    return {"documents": serialized, "count": len(serialized)}
+
+
+@app.get("/documents/summary")
+def document_summary() -> dict[str, Any]:
+    documents_payload = list_documents().get("documents", [])
+
+    total_documents = len(documents_payload)
+    successful_documents = sum(1 for item in documents_payload if item.get("status") in {"processed", "reviewed"})
+    needs_review = sum(
+        1
+        for item in documents_payload
+        if (item.get("validation") or {}).get("is_valid") is False
+        or bool((item.get("review_json") or {}).get("manual_corrections"))
+    )
+
+    confidence_values = []
+    for item in documents_payload:
+        value = (item.get("confidence") or {}).get("overall")
+        if isinstance(value, (int, float)):
+            confidence_values.append(float(value))
+
+    average_confidence = round(sum(confidence_values) / len(confidence_values), 4) if confidence_values else None
+
+    type_counts: dict[str, int] = {}
+    for item in documents_payload:
+        doc_type = item.get("document_type") or "unknown"
+        type_counts[doc_type] = type_counts.get(doc_type, 0) + 1
+
+    status_counts: dict[str, int] = {}
+    for item in documents_payload:
+        status = item.get("status") or "unknown"
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+    return {
+        "total_documents": total_documents,
+        "successful_documents": successful_documents,
+        "documents_needing_review": needs_review,
+        "average_confidence": average_confidence,
+        "document_type_distribution": type_counts,
+        "status_distribution": status_counts,
+        "recent_documents": documents_payload[:5],
+    }
+
+
 @app.get("/documents/{document_id}")
 def get_document(document_id: str) -> dict[str, Any]:
     with SessionLocal() as session:
@@ -72,6 +142,7 @@ def get_document(document_id: str) -> dict[str, Any]:
         "document_type": document.document_type,
         "status": document.status,
         "file_type": document.file_type,
+        "upload_time": document.upload_time.isoformat() if document.upload_time else None,
         "extracted_fields": extracted_json.get("extracted_fields", {}),
         "validation": extracted_json.get("validation", {}),
         "confidence": document.confidence_scores,

@@ -16,6 +16,7 @@ class Document(Base):
     upload_time = Column(DateTime, default=datetime.utcnow, nullable=False)
     status = Column(String, default="uploaded", nullable=False)
     file_type = Column(String, nullable=False)
+    document_type = Column(String, default="other_financial_document", nullable=False)
     raw_text = Column(Text, nullable=True)
     extracted_json = Column(JSON, nullable=True)
     confidence_scores = Column(JSON, nullable=True)

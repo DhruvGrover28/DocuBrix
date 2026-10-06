@@ -1,4 +1,3 @@
-import json
 import os
 from typing import Any
 
@@ -6,75 +5,221 @@ import httpx
 import streamlit as st
 
 API_BASE_URL = os.getenv("DOCUBRIX_API_URL", "http://127.0.0.1:8000").rstrip("/")
+NAV_ITEMS = [
+    "Dashboard",
+    "Document Processing",
+    "Document Library",
+    "Review Queue",
+    "Analytics",
+    "System Status",
+    "Profile",
+    "Settings",
+]
 
 st.set_page_config(page_title="DocuBrix", page_icon="📄", layout="wide")
+
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = True
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "Dashboard"
+if "profile" not in st.session_state:
+    st.session_state.profile = {
+        "name": "Alex Morgan",
+        "email": "alex@docubrix.ai",
+        "phone": "+1 (415) 555-0127",
+        "company": "Northstar Finance",
+        "title": "Operations Analyst",
+        "location": "San Francisco, CA",
+        "bio": "Focused on financial workflow automation, document intelligence, and review optimization.",
+    }
+if "settings" not in st.session_state:
+    st.session_state.settings = {
+        "notifications": True,
+        "dark_mode": False,
+        "auto_review": True,
+        "save_history": True,
+    }
 
 st.markdown(
     """
     <style>
         :root {
-            --bg: #f5f7fb;
+            --bg: #f4f7fb;
             --panel: #ffffff;
-            --border: #dfe6f1;
-            --primary: #1947c9;
-            --primary-soft: #ebf0ff;
-            --text: #162033;
-            --muted: #5b6b84;
-            --success: #1f9d67;
+            --panel-soft: #f8fafc;
+            --surface: #eef4ff;
+            --border: #dfe7f1;
+            --primary: #1d4ed8;
+            --primary-deep: #153a9a;
+            --primary-soft: #e8eeff;
+            --text: #0f172a;
+            --text-soft: #475569;
+            --success: #0f9f6e;
             --warning: #d97706;
-            --danger: #c2333f;
-            --shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+            --danger: #dc2626;
+            --shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
         }
         .stApp {
             background: var(--bg);
             color: var(--text);
         }
         .block-container {
-            padding-top: 2rem;
-            padding-bottom: 4rem;
+            padding-top: 1.5rem;
+            padding-bottom: 2rem;
         }
-        .docubrix-shell {
+        .brand-shell {
+            background: linear-gradient(180deg, #ffffff, #f7f9ff);
+            border-radius: 18px;
+            border: 1px solid var(--border);
+            padding: 1.1rem 1rem;
+            box-shadow: var(--shadow);
+            margin-bottom: 1rem;
+        }
+        .brand-name {
+            font-size: 1.1rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: var(--text);
+            margin: 0;
+        }
+        .brand-tag {
+            color: var(--text-soft);
+            font-size: 0.72rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin-top: 0.2rem;
+        }
+        .shell-card {
             background: var(--panel);
             border: 1px solid var(--border);
-            border-radius: 16px;
+            border-radius: 18px;
+            padding: 1.25rem 1.35rem;
             box-shadow: var(--shadow);
-            padding: 1.25rem 1.5rem;
-            margin-bottom: 1.25rem;
-        }
-        .sidebar .sidebar-content {
-            background: #f8faff;
+            margin-bottom: 1rem;
         }
         .metric-card {
             background: var(--panel);
             border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 1rem 1rem 0.75rem;
+            border-radius: 16px;
+            padding: 1rem 1rem 0.9rem;
             height: 100%;
-            box-shadow: var(--shadow);
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
         }
         .section-label {
             font-size: 0.72rem;
             letter-spacing: 0.12em;
             text-transform: uppercase;
-            color: var(--muted);
+            color: var(--text-soft);
             font-weight: 700;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.4rem;
         }
-        .badge {
+        .display-number {
+            font-size: 2.1rem;
+            font-weight: 800;
+            letter-spacing: -0.05em;
+            line-height: 1.1;
+            margin: 0.4rem 0;
+        }
+        .muted {
+            color: var(--text-soft);
+            font-size: 0.82rem;
+        }
+        .status-pill {
             display: inline-block;
-            padding: 0.2rem 0.55rem;
+            padding: 0.33rem 0.7rem;
             border-radius: 999px;
             font-size: 0.72rem;
             font-weight: 700;
-            letter-spacing: 0.04em;
+            letter-spacing: 0.06em;
             text-transform: uppercase;
         }
-        .badge-high { background: #dff7ec; color: #136c46; }
-        .badge-medium { background: #fff3d9; color: #9a6100; }
-        .badge-low { background: #ffe4e8; color: #992b3a; }
-        .badge-valid { background: #dff7ec; color: #136c46; }
-        .badge-review { background: #fff3d9; color: #9a6100; }
-        .badge-invalid { background: #ffe4e8; color: #992b3a; }
+        .pill-valid { background: rgba(15, 159, 110, 0.12); color: var(--success); }
+        .pill-review { background: rgba(217, 119, 6, 0.12); color: var(--warning); }
+        .pill-invalid { background: rgba(220, 38, 38, 0.12); color: var(--danger); }
+        .pill-info { background: rgba(29, 78, 216, 0.12); color: var(--primary); }
+        .data-card {
+            background: var(--panel-soft);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 0.9rem 1rem;
+            min-height: 70px;
+        }
+        .nav-item {
+            border-radius: 12px;
+            padding: 0.7rem 0.8rem;
+            margin: 0.15rem 0;
+        }
+        .nav-item:hover {
+            background: rgba(29, 78, 216, 0.05);
+        }
+        .nav-item[data-selected="true"] {
+            background: rgba(29, 78, 216, 0.08);
+            color: var(--primary-deep);
+            font-weight: 700;
+        }
+        .sidebar .sidebar-content {
+            background: #f8fafc;
+            border-right: 1px solid var(--border);
+        }
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 0.6rem;
+            margin-bottom: 1.1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .topbar-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #1d4ed8, #6d8cff);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 0.8rem;
+        }
+        .mini-button {
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: white;
+            padding: 0.5rem 0.8rem;
+            font-weight: 600;
+        }
+        .primary-button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 0.65rem 1rem;
+            font-weight: 700;
+        }
+        .ghost-button {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 10px;
+            padding: 0.65rem 1rem;
+            font-weight: 600;
+        }
+        .empty-panel {
+            background: #edf4ff;
+            border: 1px solid #d7e8ff;
+            border-radius: 14px;
+            padding: 1rem;
+            color: var(--text-soft);
+        }
+        .pill-danger { background: rgba(220, 38, 38, 0.12); color: var(--danger); }
+        .pill-warning { background: rgba(217, 119, 6, 0.12); color: var(--warning); }
+        .pill-success { background: rgba(15, 159, 110, 0.12); color: var(--success); }
+        .progress-wrap { margin: 0.4rem 0 0.8rem; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -87,8 +232,8 @@ def api_get(endpoint: str) -> dict[str, Any]:
         response = httpx.get(url, timeout=30.0)
         response.raise_for_status()
         return response.json()
-    except Exception as exc:  # pragma: no cover - UI error path
-        raise RuntimeError(f"Unable to connect to the processing service: {exc}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"Unable to connect to the processing service. Please verify the backend is running.") from exc
 
 
 def api_post_json(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -97,8 +242,8 @@ def api_post_json(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         response = httpx.post(url, json=payload, timeout=30.0)
         response.raise_for_status()
         return response.json()
-    except Exception as exc:  # pragma: no cover - UI error path
-        raise RuntimeError(f"Document processing failed. Please try again: {exc}") from exc
+    except Exception as exc:
+        raise RuntimeError("Document processing failed. Please try again.") from exc
 
 
 def api_upload(endpoint: str, uploaded_file) -> dict[str, Any]:
@@ -111,206 +256,289 @@ def api_upload(endpoint: str, uploaded_file) -> dict[str, Any]:
             message = payload.get("detail") if isinstance(payload, dict) else str(payload)
             raise RuntimeError(message or "Unsupported document format.")
         return response.json()
-    except Exception as exc:  # pragma: no cover - UI error path
-        raise RuntimeError(f"Document processing failed. Please try again: {exc}") from exc
+    except Exception as exc:
+        raise RuntimeError("Document processing failed. Please try again.") from exc
 
 
-def render_metric(label: str, value: str, hint: str = "") -> None:
+def format_doc_type(value: str) -> str:
+    return value.replace("_", " ").title() if value else "Unknown"
+
+
+def metric_card(label: str, value: str, hint: str) -> None:
     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
     st.markdown(f'<div class="section-label">{label}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div style="font-size:2rem;font-weight:700;line-height:1.1;">{value}</div>', unsafe_allow_html=True)
-    if hint:
-        st.caption(hint)
+    st.markdown(f'<div class="display-number">{value}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="muted">{hint}</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-def confidence_badge(score: Any) -> str:
-    if score is None:
-        return '<span class="badge badge-medium">Not available</span>'
-    score_value = float(score)
-    if score_value >= 0.75:
-        return '<span class="badge badge-high">High</span>'
-    if score_value >= 0.45:
-        return '<span class="badge badge-medium">Medium</span>'
-    return '<span class="badge badge-low">Low</span>'
+def status_badge(status: str) -> str:
+    status_key = (status or "").lower()
+    if status_key in {"valid", "processed", "reviewed", "success", "ok"}:
+        return '<span class="status-pill pill-valid">Valid</span>'
+    if status_key in {"warning", "needs review", "review", "manual correction"}:
+        return '<span class="status-pill pill-review">Review</span>'
+    return '<span class="status-pill pill-info">Info</span>'
 
 
-def validation_badge(validation: dict[str, Any]) -> str:
-    if not validation:
-        return '<span class="badge badge-review">Not available</span>'
-    is_valid = validation.get("is_valid")
-    if is_valid is True:
-        return '<span class="badge badge-valid">Valid</span>'
-    if is_valid is False:
-        return '<span class="badge badge-invalid">Needs review</span>'
-    return '<span class="badge badge-review">Unknown</span>'
+def render_auth_screen() -> None:
+    st.markdown(
+        """
+        <div class="shell-card">
+            <div style="font-size: 2.3rem; font-weight: 800; letter-spacing: -0.06em; margin-bottom: 0.25rem;">DocuBrix</div>
+            <div style="font-size: 1.2rem; color: #475569; font-weight: 600;">Intelligent Document Lifecycle, Analytics & Workflow Automation</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    tab = st.tabs(["Login", "Register", "Reset password"])
+    with tab[0]:
+        with st.form("login_form"):
+            st.subheader("Welcome back")
+            email = st.text_input("Email address")
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Sign in")
+            if submitted:
+                if email and password:
+                    st.session_state.authenticated = True
+                    st.session_state.current_page = "Dashboard"
+                    st.success("Demo session activated. This interface is ready for real backend authentication in a future phase.")
+                else:
+                    st.warning("Please enter your email and password.")
+    with tab[1]:
+        with st.form("register_form"):
+            st.subheader("Create account")
+            name = st.text_input("Full name")
+            email = st.text_input("Work email")
+            company = st.text_input("Organization")
+            submitted = st.form_submit_button("Create account")
+            if submitted:
+                if name and email:
+                    st.session_state.authenticated = True
+                    st.session_state.current_page = "Dashboard"
+                    st.success("Account created in demo mode. Backend authentication can be connected later.")
+                else:
+                    st.warning("Please complete the required registration fields.")
+    with tab[2]:
+        with st.form("reset_form"):
+            st.subheader("Reset password")
+            email = st.text_input("Email address to reset")
+            submitted = st.form_submit_button("Send reset link")
+            if submitted:
+                if email:
+                    st.success("Password reset instructions would be sent to the provided email in a live system.")
+                else:
+                    st.warning("Please enter an email address.")
 
 
-def normalize_doc_type(value: str) -> str:
-    return value.replace("_", " ").title() if value else "Unknown" 
+def render_sidebar() -> str:
+    with st.sidebar:
+        st.markdown(
+            """
+            <div class="brand-shell">
+                <div class="brand-name">DocuBrix</div>
+                <div class="brand-tag">Document intelligence</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if st.session_state.authenticated:
+            st.markdown(
+                """
+                <div class="shell-card" style="padding: 0.8rem 0.9rem; margin-bottom: 0.8rem;">
+                    <div style="display:flex; align-items:center; gap: 0.7rem;">
+                        <div class="avatar">AM</div>
+                        <div>
+                            <div style="font-weight: 700;">Alex Morgan</div>
+                            <div class="muted">Northstar Finance</div>
+                        </div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        selected = st.radio("Navigation", NAV_ITEMS, index=NAV_ITEMS.index(st.session_state.current_page), label_visibility="collapsed")
+        st.session_state.current_page = selected
+        st.markdown("---")
+        if st.session_state.authenticated:
+            if st.button("Log out", use_container_width=True):
+                st.session_state.authenticated = False
+                st.session_state.current_page = "Dashboard"
+                st.rerun()
+        st.caption(f"Backend target: {API_BASE_URL}")
+    return selected
 
 
 def render_dashboard_page() -> None:
-    st.markdown('<div class="docubrix-shell">', unsafe_allow_html=True)
-    st.markdown("## DocuBrix")
-    st.markdown("### Intelligent Document Lifecycle, Analytics & Workflow Automation")
-    st.markdown("A professional document intelligence workspace for financial information extraction, review, and validation.")
-    st.markdown('</div>', unsafe_allow_html=True)
-
+    st.markdown(
+        """
+        <div class="shell-card">
+            <div style="font-size: 2.3rem; font-weight: 800; letter-spacing: -0.06em; margin: 0 0 0.4rem 0;">DocuBrix</div>
+            <div style="font-size: 1.4rem; font-weight: 700; color: #0f172a;">Document Intelligence Dashboard</div>
+            <div class="muted" style="margin-top: 0.5rem;">Operational overview for financial document processing, extraction quality, and review workflows.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     try:
         summary = api_get("/documents/summary")
     except Exception as exc:
         st.warning(str(exc))
         return
 
-    metrics = [
-        ("Total documents processed", str(summary.get("total_documents", 0)), "Documents currently stored in the system"),
-        ("Documents requiring review", str(summary.get("documents_needing_review", 0)), "Documents with validation issues or manual corrections"),
-        ("Average extraction confidence", f"{summary.get('average_confidence', 'Not available')}", "Across all stored documents"),
-        ("Successfully processed documents", str(summary.get("successful_documents", 0)), "Documents with successful processing"),
-    ]
-
     cols = st.columns(4)
-    for i, (label, value, hint) in enumerate(metrics):
-        with cols[i]:
-            render_metric(label, value, hint)
+    with cols[0]:
+        metric_card("Total documents processed", str(summary.get("total_documents", 0)), "Documents currently stored in the system")
+    with cols[1]:
+        metric_card("Documents requiring review", str(summary.get("documents_needing_review", 0)), "Items flagged by validation or manual corrections")
+    with cols[2]:
+        average = summary.get("average_confidence")
+        value = "Not available" if average is None else f"{average:.2f}"
+        metric_card("Average extraction confidence", value, "Across all stored documents")
+    with cols[3]:
+        metric_card("Successfully processed documents", str(summary.get("successful_documents", 0)), "Documents completed without blocking issues")
 
-    st.subheader("Document type distribution")
+    st.subheader("Overview")
     type_distribution = summary.get("document_type_distribution", {})
-    if type_distribution:
-        chart_data = {key: value for key, value in sorted(type_distribution.items())}
-        st.bar_chart(chart_data)
-    else:
-        st.info("No document type data is available yet.")
+    recent = summary.get("recent_documents", [])
+    status_distribution = summary.get("status_distribution", {})
+
+    cols = st.columns(2)
+    with cols[0]:
+        st.markdown('<div class="shell-card"><div class="section-label">Document type distribution</div>', unsafe_allow_html=True)
+        if type_distribution:
+            st.bar_chart(type_distribution)
+        else:
+            st.markdown('<div class="empty-panel">No document type data is available yet.</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    with cols[1]:
+        st.markdown('<div class="shell-card"><div class="section-label">Processing status</div>', unsafe_allow_html=True)
+        if status_distribution:
+            st.bar_chart(status_distribution)
+        else:
+            st.markdown('<div class="empty-panel">No processing status data is available yet.</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.subheader("Recent documents")
-    recent = summary.get("recent_documents", [])
     if recent:
-        recent_rows = []
-        for item in recent:
-            recent_rows.append(
-                {
-                    "Filename": item.get("filename", "-"),
-                    "Type": normalize_doc_type(item.get("document_type") or "unknown"),
-                    "Status": item.get("status", "unknown"),
-                    "Confidence": item.get("confidence", {}).get("overall", "Not available"),
-                    "Uploaded": item.get("upload_time", "-"),
-                }
-            )
-        st.dataframe(recent_rows, use_container_width=True, hide_index=True)
+        rows = [{
+            "Filename": item.get("filename", "-"),
+            "Type": format_doc_type(item.get("document_type") or "unknown"),
+            "Status": item.get("status", "unknown"),
+            "Confidence": item.get("confidence", {}).get("overall", "Not available"),
+            "Uploaded": item.get("upload_time", "-"),
+        } for item in recent]
+        st.dataframe(rows, use_container_width=True, hide_index=True)
     else:
-        st.info("No recent documents are available yet.")
-
-    st.subheader("Processing status overview")
-    status_distribution = summary.get("status_distribution", {})
-    if status_distribution:
-        st.bar_chart(status_distribution)
-    else:
-        st.info("No processing status data is available yet.")
+        st.markdown('<div class="empty-panel">No recent documents are available yet.</div>', unsafe_allow_html=True)
 
 
 def render_processing_page() -> None:
     st.header("Document Processing")
-    st.subheader("Upload Financial Document")
+    st.caption("Upload a PDF or image and review the classified, extracted, validated output.")
 
     uploaded_file = st.file_uploader(
-        "Choose a PDF, PNG, JPG, or JPEG file",
+        "Upload financial document",
         type=["pdf", "png", "jpg", "jpeg"],
-        help="Upload an invoice, receipt, bank statement, or other financial document.",
+        help="Supported formats: PDF, PNG, JPG, JPEG",
     )
 
     if uploaded_file is not None:
         st.markdown(
-            f"""
-            <div class="docubrix-shell">
+            """
+            <div class="shell-card">
                 <div class="section-label">Selected file</div>
-                <div><strong>{uploaded_file.name}</strong></div>
-                <div>{uploaded_file.size} bytes</div>
+                <div style="font-size:1.1rem; font-weight:700;">{name}</div>
+                <div class="muted" style="margin-top:0.2rem;">{size} bytes</div>
             </div>
-            """,
+            """.format(name=uploaded_file.name, size=uploaded_file.size),
             unsafe_allow_html=True,
         )
 
-        if st.button("Process document"):
+        if st.button("Process document", type="primary"):
             try:
-                payload = api_upload("/documents/upload", uploaded_file)
-                st.session_state["processed_document"] = payload
+                result = api_upload("/documents/upload", uploaded_file)
+                st.session_state["processed_document"] = result
                 st.success("Document processed successfully.")
-            except Exception as exc:  # pragma: no cover - UI error path
+            except Exception as exc:
                 st.error(str(exc))
 
-    if "processed_document" in st.session_state:
+    if "processed_document" in st.session_state and st.session_state["processed_document"]:
         result = st.session_state["processed_document"]
         st.subheader("Processing result")
-        cols = st.columns(4)
-        with cols[0]:
+        overview_cols = st.columns(4)
+        with overview_cols[0]:
             st.metric("Filename", result.get("filename", "-"))
-        with cols[1]:
-            st.metric("Document type", normalize_doc_type(result.get("document_type") or "unknown"))
-        with cols[2]:
+        with overview_cols[1]:
+            st.metric("Document type", format_doc_type(result.get("document_type") or "unknown"))
+        with overview_cols[2]:
             st.metric("Status", result.get("status", "processed"))
-        with cols[3]:
-            score = (result.get("confidence") or {}).get("overall")
-            st.metric("Overall confidence", f"{score:.2f}" if isinstance(score, (int, float)) else "Not available")
+        with overview_cols[3]:
+            confidence_value = (result.get("confidence") or {}).get("overall")
+            st.metric("Overall confidence", f"{confidence_value:.2f}" if isinstance(confidence_value, (int, float)) else "Not available")
 
         extracted_fields = result.get("extracted_fields", {})
         validation = result.get("validation", {})
         confidence = result.get("confidence") or {}
 
-        st.markdown("### Extracted information")
+        st.subheader("Extracted information")
         if extracted_fields:
-            row_items = []
+            field_rows = []
             for key, value in extracted_fields.items():
-                if key == "document_type":
-                    continue
-                row_items.append({"Field": key.replace("_", " ").title(), "Value": value or "Not available"})
-            st.table(row_items)
+                if key != "document_type":
+                    field_rows.append({"Field": key.replace("_", " ").title(), "Value": value or "Not available"})
+            st.dataframe(field_rows, use_container_width=True, hide_index=True)
         else:
-            st.info("No extracted fields were returned by the backend for this document.")
+            st.info("No extracted fields were returned for this document.")
 
-        st.markdown("### Confidence")
+        st.subheader("Confidence")
         if confidence:
-            signals = confidence.get("signals", {})
-            for key, value in signals.items():
-                label = key.replace("_", " ").title()
-                score_value = float(value) if isinstance(value, (int, float)) else 0.0
-                st.markdown(f"**{label}**")
-                st.progress(min(1.0, max(0.0, score_value)))
-                st.caption(f"{score_value:.2f}")
+            signal_block = confidence.get("signals", {})
+            if signal_block:
+                for key, value in signal_block.items():
+                    score = float(value) if isinstance(value, (int, float)) else 0.0
+                    st.markdown(f"**{key.replace('_', ' ').title()}**")
+                    st.progress(min(1.0, max(0.0, score)))
+                    st.caption(f"{score:.2f}")
+            else:
+                st.info("No confidence signal data is available.")
         else:
             st.info("No confidence data is available for this document.")
 
-        st.markdown("### Validation")
+        st.subheader("Validation")
         if validation:
-            st.markdown(f"Validation status: {validation_badge(validation)}", unsafe_allow_html=True)
+            st.markdown(f"Validation status: {status_badge('valid' if validation.get('is_valid') else 'review')}", unsafe_allow_html=True)
             if validation.get("errors"):
-                st.warning("\n".join(validation["errors"]))
+                for item in validation["errors"]:
+                    st.warning(item)
             if validation.get("warnings"):
-                st.info("\n".join(validation["warnings"]))
+                for item in validation["warnings"]:
+                    st.info(item)
         else:
-            st.info("Validation data was not returned by the backend.")
+            st.info("No validation data was returned by the backend.")
 
         with st.expander("View extracted text"):
             st.text_area("OCR / extracted text", result.get("raw_text", ""), height=220)
 
-        st.markdown("### Human review")
+        st.subheader("Human review")
         if extracted_fields:
-            manual_fields = {}
+            manual_values = {}
             for key, value in extracted_fields.items():
                 if key == "document_type":
                     continue
-                manual_fields[key] = st.text_input(f"Edit {key.replace('_', ' ').title()}", value=str(value) if value not in (None, "") else "")
-
-            if st.button("Save Corrections"):
-                payload = {"manual_corrections": {key: value for key, value in manual_fields.items() if value not in (None, "")}}
+                manual_values[key] = st.text_input(f"Edit {key.replace('_', ' ').title()}", value=str(value) if value not in (None, "") else "")
+            if st.button("Save corrections"):
+                payload = {"manual_corrections": {key: value for key, value in manual_values.items() if value not in (None, "")}}
                 try:
-                    review_response = api_post_json(f"/documents/{result.get('document_id')}/review", payload)
+                    response = api_post_json(f"/documents/{result.get('document_id')}/review", payload)
                     st.success("Review corrections saved successfully.")
-                    st.json(review_response)
-                except Exception as exc:  # pragma: no cover - UI error path
+                    st.json(response)
+                except Exception as exc:
                     st.error(str(exc))
         else:
-            st.info("There are no extracted fields currently available for manual review.")
+            st.info("There are no extracted fields available for review.")
 
 
 def render_library_page() -> None:
@@ -323,14 +551,16 @@ def render_library_page() -> None:
         return
 
     if not documents:
-        st.info("No processed documents are available yet.")
+        st.markdown('<div class="empty-panel">No processed documents are available yet.</div>', unsafe_allow_html=True)
         return
 
     type_options = ["All"] + sorted({doc.get("document_type") or "unknown" for doc in documents})
     status_options = ["All"] + sorted({doc.get("status") or "unknown" for doc in documents})
-
-    selected_type = st.selectbox("Filter by document type", type_options)
-    selected_status = st.selectbox("Filter by status", status_options)
+    col1, col2 = st.columns(2)
+    with col1:
+        selected_type = st.selectbox("Document type", type_options)
+    with col2:
+        selected_status = st.selectbox("Status", status_options)
 
     filtered = documents
     if selected_type != "All":
@@ -338,31 +568,20 @@ def render_library_page() -> None:
     if selected_status != "All":
         filtered = [doc for doc in filtered if (doc.get("status") or "unknown") == selected_status]
 
-    if not filtered:
-        st.info("No documents match the selected filters.")
-        return
+    rows = [{
+        "Filename": doc.get("filename", "-"),
+        "Type": format_doc_type(doc.get("document_type") or "unknown"),
+        "Status": doc.get("status", "unknown"),
+        "Confidence": (doc.get("confidence") or {}).get("overall", "Not available"),
+        "Uploaded": doc.get("upload_time", "-"),
+    } for doc in filtered]
+    st.dataframe(rows, use_container_width=True, hide_index=True)
 
-    st.dataframe(
-        [
-            {
-                "Filename": doc.get("filename", "-"),
-                "Type": normalize_doc_type(doc.get("document_type") or "unknown"),
-                "Status": doc.get("status", "unknown"),
-                "Confidence": (doc.get("confidence") or {}).get("overall", "Not available"),
-                "Date": doc.get("upload_time", "-"),
-            }
-            for doc in filtered
-        ],
-        use_container_width=True,
-        hide_index=True,
-    )
-
-    selected_document = st.selectbox("Select a document to inspect", [doc.get("filename", "-") for doc in filtered])
-    selected = next((doc for doc in filtered if doc.get("filename") == selected_document), None)
-    if selected:
-        doc_id = selected.get("document_id")
-        if doc_id:
-            detail = api_get(f"/documents/{doc_id}")
+    if rows:
+        selected_name = st.selectbox("Inspect a document", [row["Filename"] for row in rows])
+        selected_doc = next((doc for doc in filtered if doc.get("filename") == selected_name), None)
+        if selected_doc:
+            detail = api_get(f"/documents/{selected_doc.get('document_id')}")
             st.subheader("Document details")
             st.json({
                 "filename": detail.get("filename"),
@@ -377,81 +596,72 @@ def render_library_page() -> None:
 def render_review_queue_page() -> None:
     st.header("Review Queue")
     try:
-        payload = api_get("/documents")
-        documents = payload.get("documents", [])
+        documents = api_get("/documents").get("documents", [])
     except Exception as exc:
         st.warning(str(exc))
         return
 
-    review_queue = []
-    for document in documents:
-        validation = (document.get("validation") or {})
-        review_json = document.get("review_json") or {}
+    queue = []
+    for doc in documents:
+        validation = doc.get("validation") or {}
+        review_json = doc.get("review_json") or {}
         if validation.get("is_valid") is False or bool(review_json.get("manual_corrections")):
-            review_queue.append(document)
+            queue.append(doc)
 
-    if not review_queue:
-        st.info("No documents currently require manual review.")
-        st.caption("The current backend exposes review metadata via document validation and manual corrections; a dedicated review-list endpoint is not yet implemented.")
+    if not queue:
+        st.markdown('<div class="empty-panel">No documents currently require manual review. The queue is empty.</div>', unsafe_allow_html=True)
+        st.caption("The current backend exposes review metadata through validation outcomes and saved manual corrections; a dedicated review-endpoint is not yet implemented.")
         return
 
-    st.caption("This queue is built from documents whose validation results or saved manual corrections indicate a review action is needed.")
-    st.dataframe(
-        [
-            {
-                "Filename": doc.get("filename", "-"),
-                "Reason": "Validation failed" if (doc.get("validation") or {}).get("is_valid") is False else "Manual correction recorded",
-                "Confidence": (doc.get("confidence") or {}).get("overall", "Not available"),
-                "Status": doc.get("status", "unknown"),
-            }
-            for doc in review_queue
-        ],
-        use_container_width=True,
-        hide_index=True,
-    )
+    st.dataframe([
+        {
+            "Filename": item.get("filename", "-"),
+            "Reason": "Validation failed" if (item.get("validation") or {}).get("is_valid") is False else "Manual corrections recorded",
+            "Confidence": (item.get("confidence") or {}).get("overall", "Not available"),
+            "Status": item.get("status", "unknown"),
+        }
+        for item in queue
+    ], use_container_width=True, hide_index=True)
 
 
 def render_analytics_page() -> None:
     st.header("Analytics")
     try:
         summary = api_get("/documents/summary")
+        documents = api_get("/documents").get("documents", [])
     except Exception as exc:
         st.warning(str(exc))
         return
 
     if not summary.get("total_documents"):
-        st.info("No document analytics are available yet.")
+        st.markdown('<div class="empty-panel">No analytics are available yet. Upload a document to populate the metrics.</div>', unsafe_allow_html=True)
         return
 
-    cols = st.columns(2)
+    cols = st.columns(3)
     with cols[0]:
+        metric_card("Total docs", str(summary.get("total_documents", 0)), "All stored documents")
+    with cols[1]:
+        metric_card("Valid", str(sum(1 for doc in documents if (doc.get("validation") or {}).get("is_valid") is True)), "Documents passing validation")
+    with cols[2]:
+        metric_card("Needs review", str(sum(1 for doc in documents if (doc.get("validation") or {}).get("is_valid") is False)), "Documents with issues")
+
+    col1, col2 = st.columns(2)
+    with col1:
         st.subheader("Document type distribution")
         st.bar_chart(summary.get("document_type_distribution", {}))
-    with cols[1]:
-        st.subheader("Processing status distribution")
+    with col2:
+        st.subheader("Processing status")
         st.bar_chart(summary.get("status_distribution", {}))
 
     st.subheader("Confidence distribution")
-    docs = api_get("/documents").get("documents", [])
-    confidence_values = []
-    for doc in docs:
-        value = (doc.get("confidence") or {}).get("overall")
-        if isinstance(value, (int, float)):
-            confidence_values.append(float(value))
-
+    confidence_values = [float(doc.get("confidence", {}).get("overall")) for doc in documents if isinstance(doc.get("confidence", {}).get("overall"), (int, float))]
     if confidence_values:
-        bucket_high = sum(1 for value in confidence_values if value >= 0.75)
-        bucket_medium = sum(1 for value in confidence_values if 0.45 <= value < 0.75)
-        bucket_low = sum(1 for value in confidence_values if value < 0.45)
-        st.bar_chart({"High": bucket_high, "Medium": bucket_medium, "Low": bucket_low})
+        high = sum(1 for value in confidence_values if value >= 0.75)
+        medium = sum(1 for value in confidence_values if 0.45 <= value < 0.75)
+        low = sum(1 for value in confidence_values if value < 0.45)
+        st.bar_chart({"High": high, "Medium": medium, "Low": low})
     else:
-        st.info("No confidence values are currently available for analytics.")
-
-    st.subheader("Validation and review statistics")
-    valid_docs = sum(1 for doc in docs if (doc.get("validation") or {}).get("is_valid") is True)
-    invalid_docs = sum(1 for doc in docs if (doc.get("validation") or {}).get("is_valid") is False)
-    reviewed_docs = sum(1 for doc in docs if (doc.get("review_json") or {}).get("manual_corrections"))
-    st.write({"Valid": valid_docs, "Needs review": invalid_docs, "Manual corrections": reviewed_docs})
+        st.markdown('<div class="empty-panel">No confidence values are available yet.</div>', unsafe_allow_html=True)
 
 
 def render_system_status_page() -> None:
@@ -460,48 +670,102 @@ def render_system_status_page() -> None:
         health = api_get("/health")
     except Exception as exc:
         st.error(str(exc))
-        st.caption("Backend status unavailable. Check the configured DOCUBRIX_API_URL value and backend deployment.")
         return
 
-    database_status = (health.get("database") or {}).get("status", "unknown")
-    db_url = (health.get("database") or {}).get("url", "Not available")
-
-    cols = st.columns(3)
+    cols = st.columns(4)
     with cols[0]:
-        st.metric("Backend status", "Online" if health.get("status") == "ok" else "Offline")
+        st.metric("Backend", "Online" if health.get("status") == "ok" else "Offline")
     with cols[1]:
-        st.metric("Database status", str(database_status))
+        st.metric("Database", str((health.get("database") or {}).get("status", "unknown")))
     with cols[2]:
-        st.metric("Environment", str(health.get("environment", "Not available")))
+        st.metric("Environment", str(health.get("environment", "unknown")))
+    with cols[3]:
+        st.metric("Service", health.get("service", "DocuBrix"))
 
     st.subheader("Runtime details")
     st.json({
         "backend_url": f"{API_BASE_URL}/health",
-        "database_url": db_url,
+        "database_url": (health.get("database") or {}).get("url", "Not available"),
         "service": health.get("service", "DocuBrix"),
         "version": health.get("version", "Not available"),
-        "ocr_available": "Not exposed by current health endpoint",
-        "api_endpoint_status": "Healthy" if health.get("status") == "ok" else "Unavailable",
+        "ocr_status": "Available when Tesseract is installed in the runtime environment",
+        "api_status": "Healthy" if health.get("status") == "ok" else "Unavailable",
     })
 
 
-navigation = st.sidebar.radio(
-    "Navigation",
-    ["Dashboard", "Document Processing", "Document Library", "Review Queue", "Analytics", "System Status"],
-)
+def render_profile_page() -> None:
+    st.header("Profile")
+    profile = st.session_state.profile
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.markdown(
+            """
+            <div class="shell-card" style="text-align:center;">
+                <div class="avatar" style="width: 80px; height: 80px; font-size: 1.4rem; margin: 0 auto 1rem auto;">AM</div>
+                <div style="font-size: 1.4rem; font-weight: 800;">Alex Morgan</div>
+                <div class="muted">Operations Analyst</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with col2:
+        with st.form("profile_form"):
+            st.text_input("Name", value=profile["name"])
+            st.text_input("Email", value=profile["email"])
+            st.text_input("Phone", value=profile["phone"])
+            st.text_input("Company", value=profile["company"])
+            st.text_input("Job title", value=profile["title"])
+            st.text_input("Location", value=profile["location"])
+            st.text_area("Bio", value=profile["bio"], height=140)
+            if st.form_submit_button("Save profile"):
+                st.success("Profile saved locally in the current demo session.")
 
-if navigation == "Dashboard":
-    render_dashboard_page()
-elif navigation == "Document Processing":
-    render_processing_page()
-elif navigation == "Document Library":
-    render_library_page()
-elif navigation == "Review Queue":
-    render_review_queue_page()
-elif navigation == "Analytics":
-    render_analytics_page()
-else:
-    render_system_status_page()
 
-st.sidebar.markdown("---")
-st.sidebar.caption(f"Backend target: {API_BASE_URL}")
+def render_settings_page() -> None:
+    st.header("Settings")
+    settings = st.session_state.settings
+    tabs = st.tabs(["Account", "Preferences", "Notifications", "Security"])
+    with tabs[0]:
+        st.checkbox("Enable workspace collaboration", value=True)
+        st.checkbox("Allow document sharing", value=True)
+    with tabs[1]:
+        st.checkbox("Enable dark mode", value=settings["dark_mode"])
+        st.checkbox("Auto-approve low-risk documents", value=settings["auto_review"])
+        st.checkbox("Store processing history", value=settings["save_history"])
+    with tabs[2]:
+        st.checkbox("Email notifications", value=settings["notifications"])
+        st.checkbox("Slack updates", value=False)
+        st.checkbox("Weekly summary digest", value=True)
+    with tabs[3]:
+        st.info("Security controls are designed to be extended when backend authentication and RBAC are added in a future phase.")
+        st.button("Enable two-factor authentication", type="secondary")
+        st.button("Review API access", type="secondary")
+
+
+def main() -> None:
+    if not st.session_state.authenticated:
+        render_auth_screen()
+        return
+
+    current_page = render_sidebar()
+
+    if current_page == "Dashboard":
+        render_dashboard_page()
+    elif current_page == "Document Processing":
+        render_processing_page()
+    elif current_page == "Document Library":
+        render_library_page()
+    elif current_page == "Review Queue":
+        render_review_queue_page()
+    elif current_page == "Analytics":
+        render_analytics_page()
+    elif current_page == "System Status":
+        render_system_status_page()
+    elif current_page == "Profile":
+        render_profile_page()
+    else:
+        render_settings_page()
+
+
+main()
+

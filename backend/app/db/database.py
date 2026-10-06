@@ -8,12 +8,20 @@ from backend.app.config import DATABASE_URL
 
 Base = declarative_base()
 
-engine: Engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+engine: Engine | None = create_engine(DATABASE_URL, pool_pre_ping=True) if DATABASE_URL else None
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine) if engine else None
 
 
 def check_database_connection() -> dict:
+    if not DATABASE_URL:
+        return {
+            "status": "not_configured",
+            "url": "not_configured",
+            "error": "DATABASE_URL is not set. Configure the environment before deploying or running the service.",
+        }
+
     try:
+        assert engine is not None
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
         return {

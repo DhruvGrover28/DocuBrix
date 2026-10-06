@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: docubrix-api
+    env: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: APP_ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false
+
+  - type: web
+    name: docubrix-frontend
+    env: docker
+    plan: free
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: .
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8501
+      - key: DOCUBRIX_API_URL
+        value: https://docubrix-api.onrender.com

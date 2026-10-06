@@ -1,17 +1,20 @@
 import json
+import os
 import urllib.request
 
 import streamlit as st
 
+API_BASE_URL = os.getenv("DOCUBRIX_API_URL", "http://localhost:8000")
+
 st.set_page_config(page_title="DocuBrix", page_icon="📄")
 st.title("DocuBrix")
-st.caption("Phase 0 foundation check")
+st.caption("Financial document processing prototype")
 
-st.write("This prototype is in the project foundation phase. The backend health endpoint is the core working checkpoint.")
+st.write(f"Backend target: {API_BASE_URL}")
 
 if st.button("Check backend health"):
     try:
-        with urllib.request.urlopen("http://localhost:8000/health", timeout=5) as response:
+        with urllib.request.urlopen(f"{API_BASE_URL}/health", timeout=10) as response:
             payload = json.loads(response.read().decode("utf-8"))
         st.success("Backend reachable")
         st.json(payload)

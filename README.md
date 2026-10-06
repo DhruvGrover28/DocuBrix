@@ -1,54 +1,69 @@
 # DocuBrix
 
-DocuBrix is a Python-based document processing prototype for financial documents. This repository currently contains the Phase 0 foundation: a working FastAPI service with a health endpoint and a reproducible environment.
+DocuBrix is a Python-based financial-document processing prototype for invoice, receipt, and bank statement workflows. The current project is a practical evaluation MVP covering document upload, OCR, classification, extraction, validation, confidence scoring, and human review.
 
 ## Project status
 
-- Phase 0: Environment audit and project foundation
-- Current state: working FastAPI health endpoint
+- Phase 0: environment audit and project foundation
+- Phase 1: upload, OCR, and document ingestion
+- Phase 2: document-type classification and layout detection
+- Phase 3: extraction, validation, confidence scoring, and manual review
+- Current state: working Phase 3 evaluation MVP
 
-## Quick start
+## Local development
 
 1. Create a virtual environment:
-   `C:/Users/grove/AppData/Local/Microsoft/WindowsApps/python3.13.exe -m venv C:/Users/grove/Docubrix/.venv`
+   `python -m venv .venv`
 2. Activate it:
-   `C:/Users/grove/Docubrix/.venv/Scripts/Activate.ps1`
+   `./.venv/Scripts/Activate.ps1` on Windows
 3. Install dependencies:
    `python -m pip install --upgrade pip`
    `python -m pip install -r requirements.txt`
-4. Run the API:
+4. Configure the local environment file:
+   - copy `.env.example` to `.env`
+   - set `DATABASE_URL` to your local PostgreSQL instance
+5. Run the API:
    `uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000`
-5. Check the health endpoint:
-   `http://localhost:8000/health`
+6. Start the frontend:
+   `streamlit run frontend/streamlit_app.py --server.address 0.0.0.0 --server.port 8501`
+7. Run tests:
+   `pytest`
 
-## Environment notes
+## Environment and security notes
 
-- PostgreSQL is the target database for the project, but this Phase 0 checkpoint validates the application successfully without requiring a live database server.
-- The application reports database availability as part of the health response and fails gracefully if no PostgreSQL instance is reachable.
-- Tesseract is not yet installed in the system environment; the Python wrapper is included so the OCR pipeline can be enabled once the OCR dependency is available.
+- `.env` is intentionally ignored by git and must never be committed.
+- Use `.env.example` as the tracked template for required runtime values.
+- Do not commit PostgreSQL data directories, virtual environments, or generated caches.
+- Production settings must use environment variables; no hardcoded local URLs in deployed services.
 
-## Phase 2 classification approach
+## Phase 3 approach
 
-The current prototype uses a lightweight rule-based classifier instead of a trained ML model. It scores document text for keyword clusters associated with the prototype categories:
+The current evaluation prototype uses a lightweight rule-based pipeline with explicit signals instead of an ML-heavy baseline. It combines:
 
-- invoice: invoice, bill to, vendor, total due, balance due
-- receipt: receipt, payment received, subtotal, tax, total paid
-- bank statement: account, statement, beginning balance, ending balance, debit, credit
-- other financial document: default when no category-specific signals are strong enough
+- OCR text extraction from PDFs and common image formats
+- heuristic document classification across invoice, receipt, bank statement, and other financial document
+- field extraction for vendor/merchant, invoice number, statement account, date, totals, and balances
+- validation checks for field presence, currency formatting, date patterns, and consistency
+- explainable confidence scoring derived from field-quality and validation signals
+- manual review records that preserve the distinction between automatically extracted and human-corrected values
 
-This is intentionally simple: it favors explainability and fast iteration over deep semantic understanding. It is limited in a few important ways:
+This is intentionally focused on transparency and prototype suitability rather than advanced model automation.
 
-- mixed documents can be misclassified when they contain several keyword families
-- layout and tabular structure are not yet interpreted as a full document model
-- OCR noise can distort keyword counts and reduce confidence in real-world scans
+## Render deployment
 
-## Basic layout and table understanding
+The project is prepared for a Render deployment using two web services:
 
-The prototype also generates a minimal layout summary for uploaded documents. It looks for repeated table-like rows using separators such as pipes or tabs, and it counts rows that resemble financial records by detecting labels like date, amount, balance, description, and total. This is intentionally conservative and is not meant to replace a full document parser.
+- FastAPI backend service using the Dockerfile in `backend/Dockerfile`
+- Streamlit frontend service using the Dockerfile in `frontend/Dockerfile`
+
+Required environment variables:
+
+- `DATABASE_URL` for the Render PostgreSQL service
+- `DOCUBRIX_API_URL` for the frontend service pointing at the deployed API URL
+- `PORT` for each service is provided by Render automatically
+
+The backend container listens on `$PORT` and uses the environment-provided database URL. The frontend container uses `DOCUBRIX_API_URL` instead of a localhost value in production.
 
 ## Future phases
 
-- Phase 1: ingestion, preprocessing, OCR, raw text extraction
-- Phase 2: classification and basic document understanding
-- Phase 3: extraction, validation, and human review
 - Phase 4+: search, RAG, analytics, and workflow automation

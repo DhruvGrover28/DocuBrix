@@ -20,6 +20,7 @@ class Document(Base):
     raw_text = Column(Text, nullable=True)
     extracted_json = Column(JSON, nullable=True)
     confidence_scores = Column(JSON, nullable=True)
+    review_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
         DateTime,

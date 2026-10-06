@@ -18,6 +18,7 @@ Thumbs.db
 *.log
 .cache/
 .pytest_cache/
+data/
 
 # Database
 *.sqlite3

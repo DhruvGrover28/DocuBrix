@@ -9,11 +9,14 @@ from backend.app.config import APP_ENVIRONMENT, APP_NAME, APP_VERSION
 from backend.app.db.database import Base, SessionLocal, check_database_connection, engine
 from backend.app.models.document import Document
 from backend.app.services.document_processor import (
+    build_confidence_report,
     classify_document,
     detect_document_type,
+    extract_financial_fields,
     extract_layout_summary,
     extract_text_from_file,
     get_file_extension,
+    validate_extracted_fields,
 )
 
 app = FastAPI(
@@ -51,6 +54,34 @@ def health() -> dict[str, Any]:
     }
 
 
+@app.get("/documents/{document_id}")
+def get_document(document_id: str) -> dict[str, Any]:
+    with SessionLocal() as session:
+        document = session.query(Document).filter(Document.id == document_id).first()
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    extracted_json = document.extracted_json or {}
+    review_json = document.review_json or {}
+    final_values = dict(extracted_json.get("extracted_fields", {}))
+    final_values.update(review_json.get("manual_corrections", {}))
+
+    return {
+        "document_id": document.id,
+        "filename": document.filename,
+        "document_type": document.document_type,
+        "status": document.status,
+        "file_type": document.file_type,
+        "extracted_fields": extracted_json.get("extracted_fields", {}),
+        "validation": extracted_json.get("validation", {}),
+        "confidence": document.confidence_scores,
+        "manual_corrections": review_json.get("manual_corrections", {}),
+        "corrected_values": review_json.get("corrected_values", {}),
+        "final_values": final_values,
+        "raw_text": document.raw_text,
+    }
+
+
 @app.post("/documents/upload")
 async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
     if not file.filename:
@@ -79,7 +110,11 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="No readable text was found in the document.")
 
     document_type = classify_document(cleaned_text)
+    extracted_fields = extract_financial_fields(cleaned_text, document_type)
+    validation = validate_extracted_fields(document_type, extracted_fields)
+    confidence = build_confidence_report(document_type, extracted_fields, validation)
     layout_summary = extract_layout_summary(cleaned_text)
+
     record = {
         "filename": filename,
         "status": "processed",
@@ -87,6 +122,9 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
         "document_type": document_type,
         "layout_summary": layout_summary,
         "raw_text": cleaned_text,
+        "extracted_fields": extracted_fields,
+        "validation": validation,
+        "confidence": confidence,
     }
 
     try:
@@ -101,6 +139,13 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
                     "document_type": document_type,
                     "source": "ocr",
                     "layout_summary": layout_summary,
+                    "extracted_fields": extracted_fields,
+                    "validation": validation,
+                },
+                confidence_scores=confidence,
+                review_json={
+                    "manual_corrections": {},
+                    "corrected_values": {},
                 },
             )
             session.add(document)
@@ -110,3 +155,42 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
         record["document_id"] = None
 
     return record
+
+
+@app.post("/documents/{document_id}/review")
+def submit_review(document_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    manual_corrections = payload.get("manual_corrections") or {}
+    if not isinstance(manual_corrections, dict) or not manual_corrections:
+        raise HTTPException(status_code=400, detail="manual_corrections must be a non-empty object.")
+
+    with SessionLocal() as session:
+        document = session.query(Document).filter(Document.id == document_id).first()
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found.")
+
+        extracted_json = document.extracted_json or {}
+        auto_extracted = dict(extracted_json.get("extracted_fields", {}))
+        manual_record = dict(document.review_json.get("manual_corrections", {})) if document.review_json else {}
+        manual_record.update(manual_corrections)
+
+        corrected_values = {}
+        for key, value in manual_corrections.items():
+            if key in auto_extracted:
+                corrected_values[key] = value
+
+        document.review_json = {
+            "manual_corrections": manual_record,
+            "corrected_values": corrected_values,
+            "extracted_values": auto_extracted,
+        }
+        document.status = "reviewed"
+        session.commit()
+
+    return {
+        "document_id": document_id,
+        "status": "reviewed",
+        "manual_corrections": manual_record,
+        "extracted_values": auto_extracted,
+        "corrected_values": corrected_values,
+    }
+

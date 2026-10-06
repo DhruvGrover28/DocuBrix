@@ -9,7 +9,9 @@ from backend.app.config import APP_ENVIRONMENT, APP_NAME, APP_VERSION
 from backend.app.db.database import Base, SessionLocal, check_database_connection, engine
 from backend.app.models.document import Document
 from backend.app.services.document_processor import (
+    classify_document,
     detect_document_type,
+    extract_layout_summary,
     extract_text_from_file,
     get_file_extension,
 )
@@ -76,12 +78,14 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
     if not cleaned_text:
         raise HTTPException(status_code=422, detail="No readable text was found in the document.")
 
-    document_type = detect_document_type(cleaned_text)
+    document_type = classify_document(cleaned_text)
+    layout_summary = extract_layout_summary(cleaned_text)
     record = {
         "filename": filename,
         "status": "processed",
         "file_type": extension,
         "document_type": document_type,
+        "layout_summary": layout_summary,
         "raw_text": cleaned_text,
     }
 
@@ -93,7 +97,11 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
                 file_type=extension,
                 document_type=document_type,
                 raw_text=cleaned_text,
-                extracted_json={"document_type": document_type, "source": "ocr"},
+                extracted_json={
+                    "document_type": document_type,
+                    "source": "ocr",
+                    "layout_summary": layout_summary,
+                },
             )
             session.add(document)
             session.commit()

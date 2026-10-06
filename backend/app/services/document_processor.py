@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import io
 import os
-from typing import Iterable
+import re
+from typing import Any
 
 import fitz
 import pytesseract
@@ -65,13 +66,100 @@ def extract_text_from_file(filename: str, file_bytes: bytes) -> str:
     raise ValueError(f"Unsupported file type for {filename!r}")
 
 
-def detect_document_type(raw_text: str) -> str:
+def classify_document(raw_text: str) -> str:
     normalized = raw_text.lower()
-    if any(marker in normalized for marker in ["invoice", "amount due", "total due", "bill to", "vendor"]):
-        return "invoice"
-    if any(marker in normalized for marker in ["receipt", "payment", "cash receipt", "subtotal", "tax"]):
-        return "invoice"
-    return "other_financial_document"
+    scores = {
+        "invoice": 0,
+        "receipt": 0,
+        "bank_statement": 0,
+    }
+
+    invoice_markers = [
+        "invoice",
+        "bill to",
+        "vendor",
+        "customer",
+        "amount due",
+        "total due",
+        "balance due",
+        "tax due",
+    ]
+    receipt_markers = [
+        "receipt",
+        "payment received",
+        "cash receipt",
+        "subtotal",
+        "tax",
+        "total paid",
+        "change",
+    ]
+    statement_markers = [
+        "bank statement",
+        "account",
+        "statement",
+        "beginning balance",
+        "ending balance",
+        "transaction",
+        "debit",
+        "credit",
+        "checking",
+        "savings",
+    ]
+
+    for marker in invoice_markers:
+        if marker in normalized:
+            scores["invoice"] += 2
+    for marker in receipt_markers:
+        if marker in normalized:
+            scores["receipt"] += 2
+    for marker in statement_markers:
+        if marker in normalized:
+            scores["bank_statement"] += 2
+
+    if normalized.count("invoice") > 0:
+        scores["invoice"] += 2
+    if normalized.count("receipt") > 0:
+        scores["receipt"] += 2
+    if re.search(r"\b(?:checking|savings|credit|debit|balance)\b", normalized):
+        scores["bank_statement"] += 1
+
+    best_label = max(scores, key=scores.get)
+    if scores[best_label] == 0:
+        return "other_financial_document"
+    return best_label
+
+
+def detect_document_type(raw_text: str) -> str:
+    return classify_document(raw_text)
+
+
+def extract_layout_summary(raw_text: str) -> dict[str, Any]:
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    table_rows = 0
+    columns: set[str] = set()
+
+    for line in lines:
+        if "|" in line:
+            parts = [part.strip() for part in line.split("|") if part.strip()]
+            if len(parts) >= 2:
+                table_rows += 1
+                columns.update(part for part in parts if len(part) < 40)
+        elif "\t" in line:
+            parts = [part.strip() for part in line.split("\t") if part.strip()]
+            if len(parts) >= 2:
+                table_rows += 1
+                columns.update(part for part in parts if len(part) < 40)
+        elif re.search(r"\b(date|description|account|amount|balance|qty|price|total|status)\b", line, flags=re.I):
+            if len(line.split()) >= 3:
+                table_rows += 1
+                columns.update(re.findall(r"[A-Za-z][A-Za-z ]{2,}", line))
+
+    return {
+        "has_table": table_rows >= 2,
+        "table_rows": table_rows,
+        "columns": sorted(columns),
+        "line_count": len(lines),
+    }
 
 
 def get_file_extension(filename: str) -> str:

@@ -400,3 +400,84 @@ def test_e2e_conversations_crud_and_cross_document_chat(db_required, monkeypatch
 
     # Verify conversation is gone
     assert client.get(f"/conversations/{conv_a_id}", headers=headers_a).status_code == 404
+
+
+# ============================================================================
+# Diagnostic Error Handling & Server-Side Logging Tests
+# ============================================================================
+
+
+def test_diagnostic_sanitizer() -> None:
+    from backend.app.services.knowledge import _sanitize_diagnostic_text
+
+    secret_key = "AIzaSyAbCdEf1234567890123456789012345"
+    text_with_key = f"Error at https://example.com/api?key={secret_key}&foo=bar for key {secret_key}"
+    sanitized = _sanitize_diagnostic_text(text_with_key, api_key=secret_key)
+
+    assert secret_key not in sanitized
+    assert "[REDACTED_API_KEY]" in sanitized or "[REDACTED_KEY]" in sanitized
+
+
+def test_diagnostic_logging_missing_api_key(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY is not configured"):
+        generate_chat_answer("What is this?", [])
+
+    assert any("[missing_api_key]" in record.message for record in caplog.records)
+
+
+def test_diagnostic_logging_http_error_redacts_api_key(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    import io
+    import urllib.error
+
+    secret_key = "AIzaSyRealSecretKey12345678901234567"
+    monkeypatch.setenv("GEMINI_API_KEY", secret_key)
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+    error_body = b'{"error": {"code": 404, "message": "models/gemini-2.5-flash is not found for API version v1beta"}}'
+    http_error = urllib.error.HTTPError(
+        url="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        code=404,
+        msg="Not Found",
+        hdrs={},
+        fp=io.BytesIO(error_body),
+    )
+
+    with patch("urllib.request.urlopen", side_effect=http_error):
+        with pytest.raises(RuntimeError, match="The configured Gemini service could not answer the question"):
+            generate_chat_answer("Test question", [])
+
+    http_records = [r for r in caplog.records if "[http_error]" in r.message]
+    assert len(http_records) >= 1
+    record_text = http_records[0].message
+    assert "404" in record_text
+    assert "models/gemini-2.5-flash is not found" in record_text
+    assert "gemini-2.5-flash" in record_text
+    assert secret_key not in record_text
+
+
+def test_diagnostic_logging_timeout_network_error(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
+    with patch("urllib.request.urlopen", side_effect=TimeoutError("Request timed out")):
+        with pytest.raises(RuntimeError, match="The configured Gemini service could not answer the question"):
+            generate_chat_answer("Test question", [])
+
+    timeout_records = [r for r in caplog.records if "[timeout_network_error]" in r.message]
+    assert len(timeout_records) >= 1
+    assert "timed out" in timeout_records[0].message
+
+
+def test_diagnostic_logging_response_parsing_error(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
+    mock_response = MagicMock()
+    mock_response.read.return_value = b"invalid-json-{"
+    mock_response.__enter__.return_value = mock_response
+
+    with patch("urllib.request.urlopen", return_value=mock_response):
+        with pytest.raises(RuntimeError, match="The configured Gemini service could not answer the question"):
+            generate_chat_answer("Test question", [])
+
+    parse_records = [r for r in caplog.records if "[response_parsing_error]" in r.message]
+    assert len(parse_records) >= 1
+    assert "JSONDecodeError" in parse_records[0].message or "Failed to decode" in parse_records[0].message
+

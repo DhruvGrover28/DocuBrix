@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from datetime import datetime
 from typing import Any
+
+logger = logging.getLogger("uvicorn.error")
+if not logger.handlers and not logging.getLogger().handlers:
+    logging.basicConfig(level=logging.INFO)
+
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -871,6 +877,10 @@ def send_chat_message(conversation_id: str, payload: dict[str, Any], user: User 
         raise HTTPException(status_code=400, detail="Message content must not be empty.")
 
     if not is_llm_configured():
+        logger.error(
+            "[Gemini Diagnostic] [missing_api_key] POST /conversations/%s/messages rejected: GEMINI_API_KEY is not configured.",
+            conversation_id,
+        )
         raise HTTPException(
             status_code=503,
             detail="DocuBrix AI Assistant is unavailable because GEMINI_API_KEY is not configured.",
@@ -920,6 +930,11 @@ def send_chat_message(conversation_id: str, payload: dict[str, Any], user: User 
         try:
             answer = generate_chat_answer(content, sources, chat_history=chat_history)
         except RuntimeError as exc:
+            logger.error(
+                "[Gemini Diagnostic] Assistant generation failed for conversation %s: %s",
+                conv.id,
+                exc,
+            )
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
         # Save assistant message with retrieved sources

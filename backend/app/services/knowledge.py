@@ -1,14 +1,38 @@
 from __future__ import annotations
 
 import json
+import logging
+import math
 import os
+import re
 import urllib.error
 import urllib.request
 from typing import Any
 
+logger = logging.getLogger("uvicorn.error")
+if not logger.handlers and not logging.getLogger().handlers:
+    logging.basicConfig(level=logging.INFO)
 
-import math
-import re
+
+def _sanitize_diagnostic_text(text: str, api_key: str | None = None) -> str:
+    if not text:
+        return ""
+    sanitized = text
+    if api_key and api_key.strip():
+        sanitized = sanitized.replace(api_key.strip(), "[REDACTED_API_KEY]")
+    # Redact Google API key format
+    sanitized = re.sub(r"AIza[0-9A-Za-z-_]{35}", "[REDACTED_API_KEY]", sanitized)
+    # Redact query param key=...
+    sanitized = re.sub(r"([?&]key=)[^&\s]+", r"\1[REDACTED_KEY]", sanitized)
+    # Redact key in JSON/headers
+    sanitized = re.sub(
+        r'("?(?:api[_-]?key|key)"?\s*[:=]\s*"?[A-Za-z0-9_\-]+"?\b)',
+        "[REDACTED_KEY]",
+        sanitized,
+        flags=re.IGNORECASE,
+    )
+    return sanitized
+
 
 
 def chunk_text(text: str, size: int = 700, overlap: int = 100) -> list[str]:
@@ -228,24 +252,104 @@ def build_gemini_prompt(question: str, sources: list[dict[str, Any]]) -> str:
 def generate_grounded_answer(question: str, sources: list[dict[str, Any]]) -> str:
     api_key = os.getenv("GEMINI_API_KEY")
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    if not api_key:
+    if not api_key or not api_key.strip():
+        logger.error(
+            "[Gemini Diagnostic] [missing_api_key] GEMINI_API_KEY is not configured or empty. Requested model: %s",
+            model,
+        )
         raise RuntimeError("GEMINI_API_KEY is not configured.")
     if not sources:
         return "The available document content does not contain enough information to answer this question."
 
-    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-    payload = json.dumps({"contents": [{"parts": [{"text": build_gemini_prompt(question, sources)}]}]}).encode("utf-8")
-    request = urllib.request.Request(endpoint, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        prompt = build_gemini_prompt(question, sources)
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
+        request = urllib.request.Request(endpoint, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    except Exception as exc:
+        logger.error(
+            "[Gemini Diagnostic] [request_construction_error] Failed to construct Gemini request. Exception: %s, Message: %s, Model: %s",
+            exc.__class__.__name__,
+            _sanitize_diagnostic_text(str(exc), api_key),
+            model,
+        )
+        raise RuntimeError("The configured Gemini service could not answer the question.") from exc
+
+    raw_response_text = ""
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raw_response_text = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        raw_error_body = ""
+        try:
+            raw_error_body = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            raw_error_body = "<failed to read error response body>"
+        truncated_body = raw_error_body[:1000] if len(raw_error_body) > 1000 else raw_error_body
+        safe_body = _sanitize_diagnostic_text(truncated_body, api_key)
+        logger.error(
+            "[Gemini Diagnostic] [http_error] Gemini API returned HTTP %s (%s). Exception: %s, Model: %s, Endpoint: https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent, Body: %s",
+            exc.code,
+            exc.reason,
+            exc.__class__.__name__,
+            model,
+            model,
+            safe_body,
+        )
+        raise RuntimeError("The configured Gemini service could not answer the question.") from exc
+    except TimeoutError as exc:
+        logger.error(
+            "[Gemini Diagnostic] [timeout_network_error] Gemini API request timed out after 30s. Exception: %s, Model: %s",
+            exc.__class__.__name__,
+            model,
+        )
+        raise RuntimeError("The configured Gemini service could not answer the question.") from exc
+    except urllib.error.URLError as exc:
+        safe_reason = _sanitize_diagnostic_text(str(getattr(exc, "reason", exc)), api_key)
+        logger.error(
+            "[Gemini Diagnostic] [timeout_network_error] Network connection error communicating with Gemini API. Exception: %s, Reason: %s, Model: %s",
+            exc.__class__.__name__,
+            safe_reason,
+            model,
+        )
+        raise RuntimeError("The configured Gemini service could not answer the question.") from exc
+    except Exception as exc:
+        logger.error(
+            "[Gemini Diagnostic] [timeout_network_error] Unexpected error communicating with Gemini API. Exception: %s, Message: %s, Model: %s",
+            exc.__class__.__name__,
+            _sanitize_diagnostic_text(str(exc), api_key),
+            model,
+        )
+        raise RuntimeError("The configured Gemini service could not answer the question.") from exc
+
+    try:
+        body = json.loads(raw_response_text)
+    except json.JSONDecodeError as exc:
+        truncated_raw = raw_response_text[:1000] if len(raw_response_text) > 1000 else raw_response_text
+        safe_raw = _sanitize_diagnostic_text(truncated_raw, api_key)
+        logger.error(
+            "[Gemini Diagnostic] [response_parsing_error] Failed to decode Gemini JSON response. Exception: %s: %s, Model: %s, Raw Response: %s",
+            exc.__class__.__name__,
+            str(exc),
+            model,
+            safe_raw,
+        )
         raise RuntimeError("The configured Gemini service could not answer the question.") from exc
 
     candidates = body.get("candidates") or []
     parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
     answer = "".join(str(part.get("text", "")) for part in parts).strip()
     if not answer:
+        candidate_meta = {
+            "finishReason": candidates[0].get("finishReason") if candidates else None,
+            "safetyRatings": candidates[0].get("safetyRatings") if candidates else None,
+            "promptFeedback": body.get("promptFeedback"),
+        }
+        logger.error(
+            "[Gemini Diagnostic] [response_parsing_error] Gemini returned no usable answer text. Model: %s, Metadata: %s",
+            model,
+            json.dumps(candidate_meta),
+        )
         raise RuntimeError("The configured Gemini service returned no grounded answer.")
     return answer
 
@@ -300,22 +404,101 @@ def generate_chat_answer(
 ) -> str:
     api_key = os.getenv("GEMINI_API_KEY")
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    if not api_key:
+    if not api_key or not api_key.strip():
+        logger.error(
+            "[Gemini Diagnostic] [missing_api_key] GEMINI_API_KEY is not configured or empty. Requested model: %s",
+            model,
+        )
         raise RuntimeError("GEMINI_API_KEY is not configured.")
 
-    prompt = build_chat_prompt(question, sources, chat_history=chat_history)
-    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-    payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
-    request = urllib.request.Request(endpoint, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        prompt = build_chat_prompt(question, sources, chat_history=chat_history)
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
+        request = urllib.request.Request(endpoint, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    except Exception as exc:
+        logger.error(
+            "[Gemini Diagnostic] [request_construction_error] Failed to construct Gemini chat request. Exception: %s, Message: %s, Model: %s",
+            exc.__class__.__name__,
+            _sanitize_diagnostic_text(str(exc), api_key),
+            model,
+        )
+        raise RuntimeError("The configured Gemini service could not answer the question.") from exc
+
+    raw_response_text = ""
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raw_response_text = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        raw_error_body = ""
+        try:
+            raw_error_body = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            raw_error_body = "<failed to read error response body>"
+        truncated_body = raw_error_body[:1000] if len(raw_error_body) > 1000 else raw_error_body
+        safe_body = _sanitize_diagnostic_text(truncated_body, api_key)
+        logger.error(
+            "[Gemini Diagnostic] [http_error] Gemini API returned HTTP %s (%s). Exception: %s, Model: %s, Endpoint: https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent, Body: %s",
+            exc.code,
+            exc.reason,
+            exc.__class__.__name__,
+            model,
+            model,
+            safe_body,
+        )
+        raise RuntimeError("The configured Gemini service could not answer the question.") from exc
+    except TimeoutError as exc:
+        logger.error(
+            "[Gemini Diagnostic] [timeout_network_error] Gemini API chat request timed out after 30s. Exception: %s, Model: %s",
+            exc.__class__.__name__,
+            model,
+        )
+        raise RuntimeError("The configured Gemini service could not answer the question.") from exc
+    except urllib.error.URLError as exc:
+        safe_reason = _sanitize_diagnostic_text(str(getattr(exc, "reason", exc)), api_key)
+        logger.error(
+            "[Gemini Diagnostic] [timeout_network_error] Network connection error communicating with Gemini API. Exception: %s, Reason: %s, Model: %s",
+            exc.__class__.__name__,
+            safe_reason,
+            model,
+        )
+        raise RuntimeError("The configured Gemini service could not answer the question.") from exc
+    except Exception as exc:
+        logger.error(
+            "[Gemini Diagnostic] [timeout_network_error] Unexpected error communicating with Gemini API. Exception: %s, Message: %s, Model: %s",
+            exc.__class__.__name__,
+            _sanitize_diagnostic_text(str(exc), api_key),
+            model,
+        )
+        raise RuntimeError("The configured Gemini service could not answer the question.") from exc
+
+    try:
+        body = json.loads(raw_response_text)
+    except json.JSONDecodeError as exc:
+        truncated_raw = raw_response_text[:1000] if len(raw_response_text) > 1000 else raw_response_text
+        safe_raw = _sanitize_diagnostic_text(truncated_raw, api_key)
+        logger.error(
+            "[Gemini Diagnostic] [response_parsing_error] Failed to decode Gemini chat JSON response. Exception: %s: %s, Model: %s, Raw Response: %s",
+            exc.__class__.__name__,
+            str(exc),
+            model,
+            safe_raw,
+        )
         raise RuntimeError("The configured Gemini service could not answer the question.") from exc
 
     candidates = body.get("candidates") or []
     parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
     answer = "".join(str(part.get("text", "")) for part in parts).strip()
     if not answer:
+        candidate_meta = {
+            "finishReason": candidates[0].get("finishReason") if candidates else None,
+            "safetyRatings": candidates[0].get("safetyRatings") if candidates else None,
+            "promptFeedback": body.get("promptFeedback"),
+        }
+        logger.error(
+            "[Gemini Diagnostic] [response_parsing_error] Gemini chat returned no usable answer text. Model: %s, Metadata: %s",
+            model,
+            json.dumps(candidate_meta),
+        )
         raise RuntimeError("The configured Gemini service returned no grounded answer.")
     return answer

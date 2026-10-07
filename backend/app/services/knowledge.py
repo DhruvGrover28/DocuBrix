@@ -53,7 +53,7 @@ def is_llm_configured() -> bool:
 
 def get_embedding(text: str) -> list[float]:
     api_key = os.getenv("EMBEDDING_API_KEY") or os.getenv("GEMINI_API_KEY")
-    model = os.getenv("EMBEDDING_MODEL", "text-embedding-004")
+    model = os.getenv("EMBEDDING_MODEL", "gemini-embedding-2")
     if not api_key:
         raise RuntimeError("Embedding API key is not configured.")
     cleaned = (text or "").strip()
@@ -222,7 +222,7 @@ def build_gemini_prompt(question: str, sources: list[dict[str, Any]]) -> str:
 
 def generate_grounded_answer(question: str, sources: list[dict[str, Any]]) -> str:
     api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY is not configured.")
     if not sources:

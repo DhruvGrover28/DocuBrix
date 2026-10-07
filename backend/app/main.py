@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime
 from typing import Any
@@ -369,12 +370,12 @@ def search_status(user: User = Depends(get_current_user)) -> dict[str, Any]:
         },
         "semantic_search": {
             "available": is_embedding_configured(),
-            "provider": "google-gemini (text-embedding-004)" if is_embedding_configured() else None,
+            "provider": f"google-gemini ({os.getenv('EMBEDDING_MODEL', 'gemini-embedding-2')})" if is_embedding_configured() else None,
             "reason": None if is_embedding_configured() else "Dense embedding provider is not configured. Configure GEMINI_API_KEY to enable vector similarity search.",
         },
         "llm_qa": {
             "available": is_llm_configured(),
-            "model": "gemini-2.0-flash" if is_llm_configured() else None,
+            "model": os.getenv("GEMINI_MODEL", "gemini-2.5-flash") if is_llm_configured() else None,
             "reason": None if is_llm_configured() else "GEMINI_API_KEY is not configured.",
         },
     }

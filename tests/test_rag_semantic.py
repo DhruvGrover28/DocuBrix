@@ -103,6 +103,80 @@ def test_generate_grounded_answer_with_mock_response(monkeypatch: pytest.MonkeyP
         assert answer == "The total payment is $100,000 based on contract chunk 1."
 
 
+def test_get_embedding_default_and_custom_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "test-emb-key")
+    monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
+    mock_payload = {"embedding": {"values": [0.123, 0.456, 0.789]}}
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps(mock_payload).encode("utf-8")
+    mock_response.__enter__.return_value = mock_response
+
+    with patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen:
+        vec = get_embedding("Hello world")
+        assert vec == [0.123, 0.456, 0.789]
+        req = mock_urlopen.call_args[0][0]
+        assert "models/gemini-embedding-2:embedContent" in req.full_url
+        sent_data = json.loads(req.data.decode("utf-8"))
+        assert sent_data["model"] == "models/gemini-embedding-2"
+        assert sent_data["content"]["parts"][0]["text"] == "Hello world"
+
+    # Test override with custom model
+    monkeypatch.setenv("EMBEDDING_MODEL", "custom-embedding-model")
+    with patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen:
+        get_embedding("Hello world")
+        req = mock_urlopen.call_args[0][0]
+        assert "models/custom-embedding-model:embedContent" in req.full_url
+
+
+def test_generate_grounded_answer_model_urls(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    mock_payload = {
+        "candidates": [{"content": {"parts": [{"text": "Answer from default model."}]}}]
+    }
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps(mock_payload).encode("utf-8")
+    mock_response.__enter__.return_value = mock_response
+
+    sources = [{"filename": "doc.pdf", "chunk_index": 0, "content": "Sample content"}]
+    with patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen:
+        ans = generate_grounded_answer("Question?", sources)
+        assert ans == "Answer from default model."
+        req = mock_urlopen.call_args[0][0]
+        assert "models/gemini-2.5-flash:generateContent" in req.full_url
+
+    # Test override with gemini-2.5-flash-lite
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    with patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen:
+        generate_grounded_answer("Question?", sources)
+        req = mock_urlopen.call_args[0][0]
+        assert "models/gemini-2.5-flash-lite:generateContent" in req.full_url
+
+
+def test_search_status_model_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.app.main import search_status
+    dummy_user = User(id="user-1", name="Test", email="t@example.com", role="user")
+
+    # When unconfigured
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("EMBEDDING_API_KEY", raising=False)
+    status_unconfigured = search_status(user=dummy_user)
+    assert status_unconfigured["semantic_search"]["available"] is False
+    assert status_unconfigured["semantic_search"]["provider"] is None
+    assert status_unconfigured["llm_qa"]["available"] is False
+    assert status_unconfigured["llm_qa"]["model"] is None
+
+    # When configured with defaults
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    status_configured = search_status(user=dummy_user)
+    assert status_configured["semantic_search"]["available"] is True
+    assert status_configured["semantic_search"]["provider"] == "google-gemini (gemini-embedding-2)"
+    assert status_configured["llm_qa"]["available"] is True
+    assert status_configured["llm_qa"]["model"] == "gemini-2.5-flash"
+
+
 def test_rank_chunks_by_relevance_keyword_fallback() -> None:
     # Minimal chunk mock objects
     class MockChunk:

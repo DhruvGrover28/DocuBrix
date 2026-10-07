@@ -750,13 +750,16 @@ function LibraryPage() {
 function DocumentDetailPage() {
   const { documentId } = useParams()
   const [document, setDocument] = useState(null)
+  const [corrections, setCorrections] = useState({})
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     const load = async () => {
       try {
         const data = await fetchDocumentById(documentId)
         setDocument(data)
+        setCorrections(data.final_values || data.extracted_fields || {})
       } catch (error) {
         toast.error(error.message || 'Unable to load document details.')
       } finally {
@@ -769,6 +772,19 @@ function DocumentDetailPage() {
 
   if (loading) return <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">Loading document details...</div>
   if (!document) return <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">Document not found.</div>
+
+  const handleSaveCorrections = async () => {
+    try {
+      setSaving(true)
+      const response = await saveReview(documentId, corrections)
+      setDocument((current) => ({ ...current, status: response.status, final_values: { ...corrections } }))
+      toast.success('Review corrections saved successfully.')
+    } catch (error) {
+      toast.error(error.response?.data?.detail || error.message || 'Unable to save corrections.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <>
@@ -803,6 +819,23 @@ function DocumentDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>Human review</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="field-grid">
+            {Object.entries(corrections).filter(([key]) => key !== 'document_type').map(([key, value]) => (
+              <div key={key}>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">{key.replace('_', ' ')}</label>
+                <Input value={value || ''} onChange={(event) => setCorrections((current) => ({ ...current, [key]: event.target.value }))} />
+              </div>
+            ))}
+          </div>
+          <Button onClick={handleSaveCorrections} disabled={saving}>{saving ? 'Saving...' : 'Save corrections'}</Button>
+        </CardContent>
+      </Card>
 
       <Card className="mt-8">
         <CardHeader>
@@ -857,7 +890,7 @@ function ReviewQueuePage() {
               <tbody className="divide-y divide-slate-200">
                 {documents.map((item) => (
                   <tr key={item.document_id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-900">{item.filename}</td>
+                    <td className="px-4 py-3 font-medium text-slate-900"><Link className="text-blue-700 hover:underline" to={`/documents/${item.document_id}`}>{item.filename}</Link></td>
                     <td className="px-4 py-3">{item.validation?.is_valid === false ? 'Validation failed' : 'Manual corrections recorded'}</td>
                     <td className="px-4 py-3">{safeFloat((item.confidence || {}).overall)?.toFixed(2) || 'N/A'}</td>
                     <td className="px-4 py-3"><Badge variant={statusColors[item.status] || 'warning'}>{item.status || 'review'}</Badge></td>

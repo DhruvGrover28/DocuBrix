@@ -25,7 +25,7 @@ DocuBrix is a Python-based financial-document processing prototype for invoice, 
 5. Run the API:
    `uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000`
 6. Start the frontend:
-   `streamlit run frontend/streamlit_app.py --server.address 0.0.0.0 --server.port 8501`
+   `cd frontend && npm install && npm run dev`
 7. Run tests:
    `pytest`
 
@@ -51,15 +51,18 @@ This is intentionally focused on transparency and prototype suitability rather t
 
 ## Render deployment
 
-The project is prepared for a Render deployment using two web services:
+The project is prepared for a Render deployment using a static frontend, an API web service, and PostgreSQL:
 
+- React/Vite frontend as a Render Static Site with root directory `frontend`, build command `npm run build`, and publish directory `dist`
 - FastAPI backend service using the Dockerfile in `backend/Dockerfile`
-- Streamlit frontend service using the Dockerfile in `frontend/Dockerfile`
+- Render PostgreSQL for persistent users and document ownership
 
 Required environment variables:
 
 - `DATABASE_URL` for the Render PostgreSQL service
-- `DOCUBRIX_API_URL` for the frontend service pointing at the deployed API URL
+- `AUTH_SECRET` for signed authentication sessions
+- `ADMIN_EMAIL` for the bootstrap administrator account
+- `VITE_API_URL` for the static frontend build, pointing at the deployed API URL
 - `PORT` for each service is provided by Render automatically
 
 The backend container listens on `$PORT` and uses the environment-provided database URL. The frontend container uses `DOCUBRIX_API_URL` instead of a localhost value in production.

@@ -19,6 +19,8 @@ Thumbs.db
 .cache/
 .pytest_cache/
 data/
+!frontend/src/data/
+!frontend/src/data/mockData.js
 
 # Database
 *.sqlite3

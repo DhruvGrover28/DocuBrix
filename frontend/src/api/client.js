@@ -80,6 +80,23 @@ export async function searchDocuments(query, documentType, status) {
   return response.data.documents || []
 }
 
+export async function searchSemanticDocuments(query, topK = 5) {
+  const response = await api.get('/documents/search/semantic', {
+    params: {
+      q: query,
+      top_k: topK,
+    },
+  })
+  return response.data.documents || []
+}
+
+export async function askDocument(documentId, question) {
+  const response = await api.post(`/documents/${documentId}/ask`, {
+    question,
+  })
+  return response.data
+}
+
 export async function fetchSearchStatus() {
   const response = await api.get('/documents/search/status')
   return response.data

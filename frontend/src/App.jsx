@@ -4,6 +4,7 @@ import {
   AlertCircle,
   ArrowRight,
   Bell,
+  Bot,
   CheckCircle2,
   ChevronRight,
   CircleDashed,
@@ -17,6 +18,7 @@ import {
   Menu,
   MoreHorizontal,
   Search,
+  Send,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -38,7 +40,25 @@ import {
 } from 'recharts'
 import { toast } from 'sonner'
 
-import { AUTH_TOKEN_KEY, fetchAdminOverview, fetchCurrentUser, fetchDocumentById, fetchDocumentSummary, fetchDocuments, fetchHealth, loginUser, logoutUser, registerUser, saveReview, searchDocuments, updateCurrentUser, uploadDocument } from './api/client'
+import {
+  AUTH_TOKEN_KEY,
+  askDocument,
+  fetchAdminOverview,
+  fetchCurrentUser,
+  fetchDocumentById,
+  fetchDocumentSummary,
+  fetchDocuments,
+  fetchHealth,
+  fetchSearchStatus,
+  loginUser,
+  logoutUser,
+  registerUser,
+  saveReview,
+  searchDocuments,
+  searchSemanticDocuments,
+  updateCurrentUser,
+  uploadDocument,
+} from './api/client'
 import { appShellNav, defaultStats } from './data/mockData'
 import { Avatar, Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, Input, Select, SelectItem, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from './components/ui'
 import { cn, formatDate, safeFloat } from './lib/utils'
@@ -49,6 +69,53 @@ const statusColors = {
   pending: 'muted',
   failed: 'danger',
   unknown: 'muted',
+}
+
+function ClassificationBadge({ classification, documentType, showType = true, className }) {
+  const method = classification?.method || 'heuristic_fallback'
+  const confidence = classification?.confidence
+  const model = classification?.model
+  const typeText = documentType || 'unknown'
+
+  if (method === 'ml') {
+    return (
+      <div className={cn('inline-flex items-center gap-1.5', className)}>
+        <Badge
+          variant="default"
+          className="bg-indigo-50 text-indigo-700 border border-indigo-200 gap-1 text-[11px] font-medium"
+          title={model ? `Model: ${model}` : 'Machine Learning Classifier'}
+        >
+          <Sparkles className="h-3 w-3 text-indigo-500" />
+          <span>{showType ? `ML: ${typeText}` : 'ML'}</span>
+          {typeof confidence === 'number' && (
+            <span className="ml-0.5 rounded bg-indigo-100/80 px-1 py-0.2 text-[10px] font-semibold text-indigo-900">
+              {(confidence * 100).toFixed(0)}%
+            </span>
+          )}
+        </Badge>
+      </div>
+    )
+  }
+
+  if (method === 'heuristic_fallback') {
+    return (
+      <div className={cn('inline-flex items-center gap-1.5', className)}>
+        <Badge
+          variant="muted"
+          className="bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-medium"
+          title="Rule-based heuristic pattern matching"
+        >
+          <span>{showType ? `Rule: ${typeText}` : 'Rule-based'}</span>
+        </Badge>
+      </div>
+    )
+  }
+
+  return (
+    <Badge variant="muted" className={cn('text-[11px] font-medium', className)}>
+      {showType ? typeText : 'Unknown'}
+    </Badge>
+  )
 }
 
 function App() {
@@ -464,7 +531,7 @@ function DashboardPage() {
                 {(summary.recent_documents || []).map((item) => (
                   <tr key={item.document_id || item.filename} className="hover:bg-slate-50">
                     <td className="py-3 pr-4 font-medium text-slate-900">{item.filename}</td>
-                    <td className="py-3 pr-4">{item.document_type || 'unknown'}</td>
+                    <td className="py-3 pr-4"><ClassificationBadge classification={item.classification} documentType={item.document_type} /></td>
                     <td className="py-3 pr-4"><Badge variant={statusColors[item.status] || 'muted'}>{item.status || 'unknown'}</Badge></td>
                     <td className="py-3 pr-4">{safeFloat((item.confidence || {}).overall)?.toFixed(2) || 'N/A'}</td>
                     <td className="py-3 pr-4">{formatDate(item.upload_time)}</td>
@@ -566,7 +633,12 @@ function ProcessingPage() {
         <div className="mt-8 space-y-8">
           <div className="grid gap-4 md:grid-cols-4">
             <StatCard label="Filename" value={documentResult.filename || '—'} hint="Document" accent="blue" />
-            <StatCard label="Type" value={documentResult.document_type || 'unknown'} hint="Classification" accent="green" />
+            <StatCard
+              label="Type"
+              value={documentResult.document_type || 'unknown'}
+              hint={documentResult.classification?.method === 'ml' ? 'ML Classifier' : 'Rule Heuristic'}
+              accent="green"
+            />
             <StatCard label="Status" value={documentResult.status || 'processed'} hint="Workflow" accent="slate" />
             <StatCard label="Confidence" value={safeFloat((documentResult.confidence || {}).overall) ? `${safeFloat((documentResult.confidence || {}).overall).toFixed(2)}` : 'N/A'} hint="Overall" accent="amber" />
           </div>
@@ -662,8 +734,16 @@ function LibraryPage() {
   const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchMode, setSearchMode] = useState('keyword')
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [searchStatus, setSearchStatus] = useState(null)
+
+  useEffect(() => {
+    fetchSearchStatus()
+      .then(setSearchStatus)
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     const load = async () => {
@@ -685,10 +765,22 @@ function LibraryPage() {
       fetchDocuments().then(setDocuments).catch(() => {})
       return undefined
     }
+
     const timer = setTimeout(async () => {
       try {
         setLoading(true)
-        setDocuments(await searchDocuments(searchQuery, typeFilter, statusFilter))
+        if (searchMode === 'semantic') {
+          if (!searchStatus?.semantic_search?.available) {
+            toast.error('Semantic search is currently unavailable on the backend.')
+            setDocuments([])
+            return
+          }
+          const results = await searchSemanticDocuments(searchQuery, 10)
+          setDocuments(results)
+        } else {
+          const results = await searchDocuments(searchQuery, typeFilter, statusFilter)
+          setDocuments(results)
+        }
       } catch (error) {
         toast.error(error.response?.data?.detail || error.message || 'Unable to search documents.')
       } finally {
@@ -696,7 +788,7 @@ function LibraryPage() {
       }
     }, 250)
     return () => clearTimeout(timer)
-  }, [searchQuery, typeFilter, statusFilter])
+  }, [searchQuery, searchMode, typeFilter, statusFilter, searchStatus])
 
   const filteredDocuments = documents.filter((item) => {
     const typeMatch = typeFilter === 'all' || (item.document_type || 'unknown') === typeFilter
@@ -711,10 +803,93 @@ function LibraryPage() {
     <>
       <PageHeader title="Document Library" subtitle="Search, filter, and inspect the full document corpus." />
 
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-soft">
+        <span className="font-semibold text-slate-700">Capabilities:</span>
+        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700 border border-emerald-200">
+          <CheckCircle2 className="h-3 w-3" /> Keyword Search (Active)
+        </span>
+        {searchStatus?.semantic_search?.available ? (
+          <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 font-medium text-blue-700 border border-blue-200">
+            <Sparkles className="h-3 w-3" /> Semantic Search ({searchStatus.semantic_search.provider || 'Active'})
+          </span>
+        ) : (
+          <span
+            className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-500 border border-slate-200"
+            title={searchStatus?.semantic_search?.reason || 'Dense embedding provider not configured'}
+          >
+            <CircleDashed className="h-3 w-3" /> Semantic Vector: Offline
+          </span>
+        )}
+        {searchStatus?.llm_qa?.available ? (
+          <span className="inline-flex items-center gap-1 rounded-md bg-purple-50 px-2 py-0.5 font-medium text-purple-700 border border-purple-200">
+            <Bot className="h-3 w-3" /> Grounded Q&A ({searchStatus.llm_qa.model || 'Active'})
+          </span>
+        ) : (
+          <span
+            className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-500 border border-slate-200"
+            title={searchStatus?.llm_qa?.reason || 'GEMINI_API_KEY not configured'}
+          >
+            <CircleDashed className="h-3 w-3" /> Grounded Q&A: Offline
+          </span>
+        )}
+      </div>
+
       <div className="mb-6 grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2">
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">Search documents</label>
-          <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search filenames, text, or document type" />
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="text-sm font-medium text-slate-700">Search documents</label>
+            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setSearchMode('keyword')}
+                className={cn(
+                  'rounded-md px-2.5 py-1 font-medium transition-colors',
+                  searchMode === 'keyword'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900',
+                )}
+              >
+                Keyword Match
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!searchStatus?.semantic_search?.available) {
+                    toast.info('Semantic search is unavailable until an embedding provider is configured.')
+                  }
+                  setSearchMode('semantic')
+                }}
+                className={cn(
+                  'flex items-center gap-1 rounded-md px-2.5 py-1 font-medium transition-colors',
+                  searchMode === 'semantic'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900',
+                  searchStatus && !searchStatus.semantic_search?.available && 'opacity-70',
+                )}
+              >
+                <Sparkles className="h-3 w-3" />
+                Semantic Vector
+              </button>
+            </div>
+          </div>
+          <Input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={
+              searchMode === 'semantic'
+                ? 'Enter natural language search (e.g. invoice total and tax amount)...'
+                : 'Search filenames, text, or document type...'
+            }
+          />
+          {searchMode === 'semantic' && searchStatus && !searchStatus.semantic_search?.available && (
+            <div className="mt-2 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+              <div>
+                <div className="font-semibold">Semantic vector search is unavailable</div>
+                <div className="mt-0.5">{searchStatus.semantic_search.reason || 'Embedding provider is not configured. Keyword search remains fully operational.'}</div>
+              </div>
+            </div>
+          )}
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Document type</label>
@@ -738,14 +913,20 @@ function LibraryPage() {
         <CardContent className="overflow-x-auto p-0">
           {loading ? (
             <div className="p-6 text-sm text-slate-500">Loading documents...</div>
+          ) : filteredDocuments.length === 0 ? (
+            <div className="p-6 text-sm text-slate-500">
+              {searchQuery.trim() ? 'No documents matched your query.' : 'No documents found.'}
+            </div>
           ) : (
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-slate-600">
                 <tr>
                   <th className="px-4 py-3">Filename</th>
-                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Classification</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Confidence</th>
+                  <th className="px-4 py-3">
+                    {searchMode === 'semantic' ? 'Similarity / Conf' : 'Confidence'}
+                  </th>
                   <th className="px-4 py-3">Uploaded</th>
                   <th className="px-4 py-3">Action</th>
                 </tr>
@@ -762,9 +943,19 @@ function LibraryPage() {
                         />
                       )}
                     </td>
-                    <td className="px-4 py-3">{document.document_type || 'unknown'}</td>
+                    <td className="px-4 py-3">
+                      <ClassificationBadge classification={document.classification} documentType={document.document_type} />
+                    </td>
                     <td className="px-4 py-3"><Badge variant={statusColors[document.status] || 'muted'}>{document.status || 'unknown'}</Badge></td>
-                    <td className="px-4 py-3">{safeFloat((document.confidence || {}).overall)?.toFixed(2) || 'N/A'}</td>
+                    <td className="px-4 py-3">
+                      {typeof document.similarity === 'number' ? (
+                        <Badge variant="default" className="bg-purple-50 text-purple-700 border border-purple-200">
+                          Sim: {(document.similarity * 100).toFixed(1)}%
+                        </Badge>
+                      ) : (
+                        <span>{safeFloat((document.confidence || {}).overall)?.toFixed(2) || 'N/A'}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">{formatDate(document.upload_time)}</td>
                     <td className="px-4 py-3"><Link className="font-medium text-blue-700 hover:underline" to={`/documents/${document.document_id}`}>Open</Link></td>
                   </tr>
@@ -778,12 +969,205 @@ function LibraryPage() {
   )
 }
 
+function DocumentQAPanel({ documentId, filename, searchStatus }) {
+  const [question, setQuestion] = useState('')
+  const [asking, setAsking] = useState(false)
+  const [qaResult, setQaResult] = useState(null)
+  const [qaError, setQaError] = useState(null)
+  const [errorStatus, setErrorStatus] = useState(null)
+
+  const handleAsk = async (e) => {
+    if (e) e.preventDefault()
+    const trimmed = question.trim()
+    if (!trimmed) {
+      toast.error('Please enter a question to ask the document.')
+      return
+    }
+
+    setAsking(true)
+    setQaError(null)
+    setErrorStatus(null)
+
+    try {
+      const response = await askDocument(documentId, trimmed)
+      setQaResult(response)
+    } catch (err) {
+      const status = err.response?.status
+      setErrorStatus(status)
+      const detail = err.response?.data?.detail || err.message || 'An unexpected error occurred.'
+
+      if (status === 503) {
+        setQaError(detail || 'Grounded Q&A is unavailable because GEMINI_API_KEY is not configured on the backend.')
+      } else if (status === 401) {
+        setQaError('Authentication session expired. Please sign in again.')
+      } else if (status === 403) {
+        setQaError('You do not have permission to query this document.')
+      } else if (status === 404) {
+        setQaError('Document was not found or has been removed.')
+      } else {
+        setQaError(detail)
+      }
+    } finally {
+      setAsking(false)
+    }
+  }
+
+  return (
+    <Card className="mt-8 border-blue-100 bg-white shadow-soft">
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <Bot className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle className="text-base font-semibold">Grounded Document Q&A</CardTitle>
+              <p className="text-xs text-slate-500">Ask questions answered strictly from this document's indexed content.</p>
+            </div>
+          </div>
+          {searchStatus && (
+            <div>
+              {searchStatus.llm_qa?.available ? (
+                <Badge variant="success" className="gap-1 text-[11px]">
+                  <CheckCircle2 className="h-3 w-3" /> Grounded Q&A Ready
+                </Badge>
+              ) : (
+                <Badge variant="muted" className="gap-1 text-[11px] bg-amber-50 text-amber-700 border border-amber-200">
+                  <AlertCircle className="h-3 w-3 text-amber-600" /> API Unconfigured
+                </Badge>
+              )}
+            </div>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={handleAsk} className="space-y-3">
+          <div>
+            <Textarea
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="e.g. What is the total invoice amount and payment deadline? Who is the vendor?"
+              className="min-h-[85px] text-sm"
+              disabled={asking}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-400">
+              Answers are strictly synthesized from retrieved document chunks.
+            </span>
+            <Button
+              type="submit"
+              disabled={asking || !question.trim()}
+              className="gap-2 bg-blue-600 text-white hover:bg-blue-700"
+            >
+              {asking ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Analyzing document...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Ask Document
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
+
+        {qaError && (
+          <div
+            className={cn(
+              'rounded-xl border p-4 text-sm',
+              errorStatus === 503
+                ? 'border-amber-200 bg-amber-50 text-amber-900'
+                : 'border-red-200 bg-red-50 text-red-900',
+            )}
+          >
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className={cn('h-5 w-5 shrink-0 mt-0.5', errorStatus === 503 ? 'text-amber-600' : 'text-red-600')} />
+              <div className="space-y-1">
+                <div className="font-semibold">
+                  {errorStatus === 503
+                    ? 'Grounded Q&A Service Unavailable'
+                    : errorStatus === 401
+                    ? 'Authentication Required'
+                    : errorStatus === 404
+                    ? 'Document Not Found'
+                    : 'Query Failed'}
+                </div>
+                <div className="text-xs leading-relaxed text-slate-700">{qaError}</div>
+                {errorStatus === 503 && (
+                  <p className="mt-1 text-xs text-amber-800">
+                    Dense semantic retrieval and Gemini LLM synthesis require <code className="rounded bg-amber-100 px-1 py-0.5 font-mono">GEMINI_API_KEY</code> on the backend.
+                    Keyword search and structured extraction remain operational.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {qaResult && (
+          <div className="space-y-4 rounded-xl border border-blue-100 bg-blue-50/30 p-4">
+            <div>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-blue-700">Grounded Answer</div>
+              <div className="rounded-lg bg-white p-4 text-sm leading-relaxed text-slate-800 shadow-sm border border-slate-200/80 whitespace-pre-wrap">
+                {qaResult.answer}
+              </div>
+            </div>
+
+            {qaResult.sources && qaResult.sources.length > 0 && (
+              <div>
+                <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <span>Citations & Retrieved Sources ({qaResult.sources.length})</span>
+                  <span className="text-[11px] font-normal text-slate-400">Ranked by relevance</span>
+                </div>
+                <div className="space-y-2">
+                  {qaResult.sources.map((src, idx) => (
+                    <div key={idx} className="rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-sm">
+                      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-1 text-slate-500">
+                        <span className="font-semibold text-slate-700">
+                          Source {idx + 1}: Chunk #{src.chunk_index} ({src.filename})
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {src.retrieval_method === 'semantic' ? (
+                            <Badge variant="default" className="bg-purple-50 text-purple-700 border border-purple-200 text-[10px]">
+                              Semantic (Score: {src.relevance_score})
+                            </Badge>
+                          ) : (
+                            <Badge variant="muted" className="text-[10px]">
+                              Keyword (Matches: {src.relevance_score})
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <div className="rounded bg-slate-50 p-2 font-mono text-[11px] leading-relaxed text-slate-700 border border-slate-100 whitespace-pre-wrap">
+                        {src.content}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function DocumentDetailPage() {
   const { documentId } = useParams()
   const [document, setDocument] = useState(null)
   const [corrections, setCorrections] = useState({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [searchStatus, setSearchStatus] = useState(null)
+
+  useEffect(() => {
+    fetchSearchStatus().then(setSearchStatus).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const load = async () => {
@@ -843,13 +1227,43 @@ function DocumentDetailPage() {
             <CardTitle>Metadata</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-slate-700">
-            <div className="flex justify-between"><span>Document type</span><span className="font-medium text-slate-900">{document.document_type || 'unknown'}</span></div>
-            <div className="flex justify-between"><span>Status</span><span className="font-medium text-slate-900">{document.status || 'unknown'}</span></div>
-            <div className="flex justify-between"><span>Uploaded</span><span className="font-medium text-slate-900">{formatDate(document.upload_time)}</span></div>
-            <div className="flex justify-between"><span>Confidence</span><span className="font-medium text-slate-900">{safeFloat((document.confidence || {}).overall)?.toFixed(2) || 'N/A'}</span></div>
+            <div className="flex justify-between items-center">
+              <span>Document type</span>
+              <span className="font-medium text-slate-900 capitalize">{document.document_type || 'unknown'}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span>Classification</span>
+              <ClassificationBadge classification={document.classification} documentType={document.document_type} />
+            </div>
+            <div className="flex justify-between items-center">
+              <span>Model</span>
+              <span className="font-mono text-xs text-slate-800">{document.classification?.model || 'None (Heuristic)'}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span>Model confidence</span>
+              <span className="font-medium text-slate-900">
+                {typeof document.classification?.confidence === 'number'
+                  ? `${(document.classification.confidence * 100).toFixed(1)}%`
+                  : 'N/A (Heuristic)'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span>Status</span>
+              <Badge variant={statusColors[document.status] || 'muted'}>{document.status || 'unknown'}</Badge>
+            </div>
+            <div className="flex justify-between items-center">
+              <span>Uploaded</span>
+              <span className="font-medium text-slate-900">{formatDate(document.upload_time)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span>Extraction confidence</span>
+              <span className="font-medium text-slate-900">{safeFloat((document.confidence || {}).overall)?.toFixed(2) || 'N/A'}</span>
+            </div>
           </CardContent>
         </Card>
       </div>
+
+      <DocumentQAPanel documentId={documentId} filename={document.filename} searchStatus={searchStatus} />
 
       <Card className="mt-8">
         <CardHeader>

@@ -139,3 +139,35 @@ export async function deleteDocument(documentId) {
   const response = await api.delete(`/documents/${documentId}`)
   return response.data
 }
+
+export async function fetchConversations() {
+  const response = await api.get('/conversations')
+  return response.data.conversations || []
+}
+
+export async function createConversation(payload = {}) {
+  const response = await api.post('/conversations', payload)
+  return response.data
+}
+
+export async function fetchConversation(conversationId) {
+  const response = await api.get(`/conversations/${conversationId}`)
+  return response.data
+}
+
+export async function updateConversation(conversationId, payload) {
+  const response = await api.patch(`/conversations/${conversationId}`, payload)
+  return response.data
+}
+
+export async function deleteConversation(conversationId) {
+  const response = await api.delete(`/conversations/${conversationId}`)
+  return response.data
+}
+
+export async function sendChatMessage(conversationId, content) {
+  const response = await api.post(`/conversations/${conversationId}/messages`, {
+    content,
+  })
+  return response.data
+}

@@ -78,3 +78,12 @@ def ensure_schema() -> None:
                         "FOREIGN KEY (owner_id) REFERENCES users (id) NOT VALID"
                     )
                 )
+
+        table_names = set(inspector.get_table_names())
+        if "conversations" in table_names:
+            conv_columns = {col["name"] for col in inspector.get_columns("conversations")}
+            if "document_id" not in conv_columns:
+                connection.execute(text("ALTER TABLE conversations ADD COLUMN document_id VARCHAR"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_conversations_owner_id ON conversations (owner_id)"))
+        if "chat_messages" in table_names:
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_chat_messages_conversation_id ON chat_messages (conversation_id)"))

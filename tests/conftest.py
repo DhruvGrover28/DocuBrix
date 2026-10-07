@@ -29,11 +29,14 @@ def db_required():
         yield
     finally:
         from backend.app.db.database import SessionLocal
+        from backend.app.models.conversation import ChatMessage, Conversation
         from backend.app.models.document import Document, DocumentChunk
         from backend.app.models.user import User
 
         if SessionLocal is not None:
             with SessionLocal() as session:
+                session.query(ChatMessage).delete(synchronize_session=False)
+                session.query(Conversation).delete(synchronize_session=False)
                 session.query(DocumentChunk).delete(synchronize_session=False)
                 session.query(Document).delete(synchronize_session=False)
                 session.query(User).delete(synchronize_session=False)

@@ -11,6 +11,7 @@ from sqlalchemy import or_
 
 from backend.app.config import ADMIN_EMAIL, APP_ENVIRONMENT, APP_NAME, APP_VERSION
 from backend.app.db.database import SessionLocal, check_database_connection, ensure_schema
+from backend.app.models.conversation import ChatMessage, Conversation
 from backend.app.models.document import Document, DocumentChunk
 from backend.app.models.user import User
 from backend.app.services.auth import create_access_token, decode_access_token, hash_password, verify_password
@@ -31,6 +32,7 @@ from backend.app.services.knowledge import (
     cosine_similarity,
     extract_excerpts,
     extract_highlighted_snippet,
+    generate_chat_answer,
     generate_grounded_answer,
     get_embedding,
     is_embedding_configured,
@@ -129,6 +131,31 @@ def serialize_document(document: Document) -> dict[str, Any]:
         "review_json": review_json,
         "raw_text": document.raw_text,
     }
+
+
+def serialize_chat_message(msg: ChatMessage) -> dict[str, Any]:
+    return {
+        "id": msg.id,
+        "conversation_id": msg.conversation_id,
+        "role": msg.role,
+        "content": msg.content,
+        "sources": msg.sources or [],
+        "created_at": msg.created_at.isoformat() if msg.created_at else None,
+    }
+
+
+def serialize_conversation(conv: Conversation, include_messages: bool = False) -> dict[str, Any]:
+    data: dict[str, Any] = {
+        "id": conv.id,
+        "owner_id": conv.owner_id,
+        "title": conv.title,
+        "document_id": conv.document_id,
+        "created_at": conv.created_at.isoformat() if conv.created_at else None,
+        "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+    }
+    if include_messages:
+        data["messages"] = [serialize_chat_message(m) for m in (conv.messages or [])]
+    return data
 
 
 @app.post("/auth/register")
@@ -742,4 +769,185 @@ def delete_document(document_id: str, user: User = Depends(get_current_user)) ->
         session.delete(document)
         session.commit()
     return {"document_id": document_id, "status": "deleted"}
+
+
+# ============================================================================
+# Phase 5: DocuBrix AI Assistant / Multi-Turn Document Chatbot Endpoints
+# ============================================================================
+
+
+@app.post("/conversations")
+def create_conversation(payload: dict[str, Any] | None = None, user: User = Depends(get_current_user)) -> dict[str, Any]:
+    payload = payload or {}
+    title = str(payload.get("title") or "").strip()
+    document_id = payload.get("document_id")
+
+    with SessionLocal() as session:
+        if document_id:
+            doc = document_query(session, user).filter(Document.id == document_id).first()
+            if doc is None:
+                raise HTTPException(status_code=404, detail="Scoped document not found or unauthorized.")
+            if not title:
+                title = f"Chat: {doc.filename}"
+
+        if not title:
+            title = "New Conversation"
+
+        conv = Conversation(
+            owner_id=user.id,
+            title=title[:255],
+            document_id=document_id,
+        )
+        session.add(conv)
+        session.commit()
+        session.refresh(conv)
+        return serialize_conversation(conv)
+
+
+@app.get("/conversations")
+def list_conversations(user: User = Depends(get_current_user)) -> dict[str, Any]:
+    with SessionLocal() as session:
+        query = session.query(Conversation)
+        if user.role != "admin":
+            query = query.filter(Conversation.owner_id == user.id)
+        convs = query.order_by(Conversation.updated_at.desc()).all()
+        return {
+            "conversations": [serialize_conversation(c) for c in convs],
+            "count": len(convs),
+        }
+
+
+@app.get("/conversations/{conversation_id}")
+def get_conversation(conversation_id: str, user: User = Depends(get_current_user)) -> dict[str, Any]:
+    with SessionLocal() as session:
+        query = session.query(Conversation).filter(Conversation.id == conversation_id)
+        if user.role != "admin":
+            query = query.filter(Conversation.owner_id == user.id)
+        conv = query.first()
+        if conv is None:
+            raise HTTPException(status_code=404, detail="Conversation not found.")
+        return serialize_conversation(conv, include_messages=True)
+
+
+@app.patch("/conversations/{conversation_id}")
+def update_conversation(conversation_id: str, payload: dict[str, Any], user: User = Depends(get_current_user)) -> dict[str, Any]:
+    new_title = str(payload.get("title") or "").strip()
+    if not new_title:
+        raise HTTPException(status_code=400, detail="Title must not be empty.")
+
+    with SessionLocal() as session:
+        query = session.query(Conversation).filter(Conversation.id == conversation_id)
+        if user.role != "admin":
+            query = query.filter(Conversation.owner_id == user.id)
+        conv = query.first()
+        if conv is None:
+            raise HTTPException(status_code=404, detail="Conversation not found.")
+        conv.title = new_title[:255]
+        conv.updated_at = datetime.utcnow()
+        session.commit()
+        session.refresh(conv)
+        return serialize_conversation(conv)
+
+
+@app.delete("/conversations/{conversation_id}")
+def delete_conversation(conversation_id: str, user: User = Depends(get_current_user)) -> dict[str, Any]:
+    with SessionLocal() as session:
+        query = session.query(Conversation).filter(Conversation.id == conversation_id)
+        if user.role != "admin":
+            query = query.filter(Conversation.owner_id == user.id)
+        conv = query.first()
+        if conv is None:
+            raise HTTPException(status_code=404, detail="Conversation not found.")
+        session.query(ChatMessage).filter(ChatMessage.conversation_id == conv.id).delete(synchronize_session=False)
+        session.delete(conv)
+        session.commit()
+        return {"status": "deleted", "id": conversation_id}
+
+
+@app.post("/conversations/{conversation_id}/messages")
+def send_chat_message(conversation_id: str, payload: dict[str, Any], user: User = Depends(get_current_user)) -> dict[str, Any]:
+    content = str(payload.get("content") or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Message content must not be empty.")
+
+    if not is_llm_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="DocuBrix AI Assistant is unavailable because GEMINI_API_KEY is not configured.",
+        )
+
+    with SessionLocal() as session:
+        query = session.query(Conversation).filter(Conversation.id == conversation_id)
+        if user.role != "admin":
+            query = query.filter(Conversation.owner_id == user.id)
+        conv = query.first()
+        if conv is None:
+            raise HTTPException(status_code=404, detail="Conversation not found.")
+
+        # Save user message
+        user_msg = ChatMessage(
+            conversation_id=conv.id,
+            role="user",
+            content=content,
+        )
+        session.add(user_msg)
+        session.flush()
+
+        # Multi-turn context: fetch previous messages in this conversation (window of last 6)
+        past_messages = (
+            session.query(ChatMessage)
+            .filter(ChatMessage.conversation_id == conv.id, ChatMessage.id != user_msg.id)
+            .order_by(ChatMessage.created_at.asc())
+            .all()
+        )
+        history_window = past_messages[-6:]
+        chat_history = [{"role": m.role, "content": m.content} for m in history_window]
+
+        # Cross-document RAG retrieval: STRICT server-side owner_id scoping!
+        chunk_query = session.query(DocumentChunk).filter(DocumentChunk.owner_id == user.id)
+        if conv.document_id:
+            chunk_query = chunk_query.filter(DocumentChunk.document_id == conv.document_id)
+        candidate_chunks = chunk_query.all()
+
+        # Map document_id -> filename for verified citations
+        user_docs = session.query(Document.id, Document.filename).filter(Document.owner_id == user.id).all()
+        filename_map = {str(d.id): d.filename for d in user_docs}
+
+        # Rank relevant chunks across the user's documents
+        sources = rank_chunks_by_relevance(content, candidate_chunks, filename_map=filename_map, top_k=5)
+
+        # Generate grounded response with Gemini
+        try:
+            answer = generate_chat_answer(content, sources, chat_history=chat_history)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        # Save assistant message with retrieved sources
+        assistant_msg = ChatMessage(
+            conversation_id=conv.id,
+            role="assistant",
+            content=answer,
+            sources=sources,
+        )
+        session.add(assistant_msg)
+
+        # Update conversation timestamp & auto-title if first turn
+        conv.updated_at = datetime.utcnow()
+        if conv.title in ("New Conversation", "New Chat") and len(past_messages) == 0:
+            clean_title = content.replace("\n", " ").strip()
+            conv.title = (clean_title[:38] + "...") if len(clean_title) > 40 else clean_title
+
+        session.commit()
+        session.refresh(assistant_msg)
+        session.refresh(user_msg)
+        session.refresh(conv)
+
+        return {
+            "conversation_id": conv.id,
+            "user_message": serialize_chat_message(user_msg),
+            "assistant_message": serialize_chat_message(assistant_msg),
+            "sources": sources,
+            "conversation": serialize_conversation(conv),
+        }
+
 

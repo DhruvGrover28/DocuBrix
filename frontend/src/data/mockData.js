@@ -2,6 +2,7 @@ export const appShellNav = [
   { label: 'Dashboard', path: '/dashboard' },
   { label: 'Document Processing', path: '/processing' },
   { label: 'Document Library', path: '/library' },
+  { label: 'AI Assistant', path: '/chat' },
   { label: 'Review Queue', path: '/review' },
   { label: 'Analytics', path: '/analytics' },
   { label: 'System Status', path: '/status' },

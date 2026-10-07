@@ -165,6 +165,7 @@ def rank_chunks_by_relevance(
     question: str,
     chunks: list[Any],
     filename: str = "document",
+    filename_map: dict[str, str] | None = None,
     top_k: int = 5,
 ) -> list[dict[str, Any]]:
     if not chunks:
@@ -197,7 +198,11 @@ def rank_chunks_by_relevance(
     return [
         {
             "document_id": getattr(chunk, "document_id", None),
-            "filename": filename,
+            "filename": (
+                filename_map.get(str(getattr(chunk, "document_id", "")), filename)
+                if filename_map and str(getattr(chunk, "document_id", "")) in filename_map
+                else getattr(chunk, "filename", filename)
+            ),
             "chunk_index": getattr(chunk, "chunk_index", 0),
             "content": getattr(chunk, "content", ""),
             "relevance_score": round(score, 4),
@@ -230,6 +235,77 @@ def generate_grounded_answer(question: str, sources: list[dict[str, Any]]) -> st
 
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     payload = json.dumps({"contents": [{"parts": [{"text": build_gemini_prompt(question, sources)}]}]}).encode("utf-8")
+    request = urllib.request.Request(endpoint, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise RuntimeError("The configured Gemini service could not answer the question.") from exc
+
+    candidates = body.get("candidates") or []
+    parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+    answer = "".join(str(part.get("text", "")) for part in parts).strip()
+    if not answer:
+        raise RuntimeError("The configured Gemini service returned no grounded answer.")
+    return answer
+
+
+def build_chat_prompt(
+    question: str,
+    sources: list[dict[str, Any]],
+    chat_history: list[dict[str, str]] | None = None,
+) -> str:
+    instructions = (
+        "You are DocuBrix AI Assistant, an expert document lifecycle and intelligence assistant.\n"
+        "Grounding Rules:\n"
+        "1. Base factual answers strictly on the supplied document context below.\n"
+        "2. If the supplied document context does not contain enough information to answer, state clearly that the information is unavailable in the uploaded documents.\n"
+        "3. Do not invent document facts, figures, dates, or citations.\n"
+        "4. Use the recent conversation history to resolve conversational context, references, or pronouns (e.g. 'it', 'that invoice', 'the previous amount'), but NEVER treat conversation history as a substitute for verified document evidence.\n"
+        "5. Reference source filenames and chunk indices when citing information (e.g. [filename.pdf chunk 0]).\n"
+        "6. Answer clearly, professionally, and concisely."
+    )
+
+    if sources:
+        context_parts = []
+        for index, source in enumerate(sources):
+            context_parts.append(
+                f"[Source {index + 1}: {source['filename']} chunk {source['chunk_index']}]\n{source['content']}"
+            )
+        context_str = "\n\n".join(context_parts)
+    else:
+        context_str = "No relevant document chunks found in user workspace."
+
+    history_str = ""
+    if chat_history:
+        formatted_history = []
+        for msg in chat_history:
+            role = "User" if msg.get("role") == "user" else "Assistant"
+            formatted_history.append(f"{role}: {msg.get('content', '')}")
+        history_str = "\n\nRecent Conversation History:\n" + "\n".join(formatted_history)
+
+    return (
+        f"{instructions}\n\n"
+        f"Retrieved Document Context:\n{context_str}"
+        f"{history_str}\n\n"
+        f"Current User Question: {question}\n\n"
+        "Assistant Response:"
+    )
+
+
+def generate_chat_answer(
+    question: str,
+    sources: list[dict[str, Any]],
+    chat_history: list[dict[str, str]] | None = None,
+) -> str:
+    api_key = os.getenv("GEMINI_API_KEY")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is not configured.")
+
+    prompt = build_chat_prompt(question, sources, chat_history=chat_history)
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
     request = urllib.request.Request(endpoint, data=payload, headers={"Content-Type": "application/json"}, method="POST")
     try:
         with urllib.request.urlopen(request, timeout=30) as response:

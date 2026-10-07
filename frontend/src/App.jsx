@@ -209,12 +209,11 @@ function ProtectedLayout({ user, children, mobileOpen, setMobileOpen, onLogout }
     <div className="min-h-screen bg-slate-100 text-slate-900">
       <div className="mx-auto flex max-w-[1600px]">
         <aside className={cn('fixed inset-y-0 left-0 z-40 w-72 border-r border-slate-200 bg-slate-50/95 p-4 transition-transform lg:translate-x-0', mobileOpen ? 'translate-x-0' : '-translate-x-full', 'lg:static')}>
-          <div className="mb-5 flex items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-sm font-bold text-white">D</div>
-            <div>
-              <div className="text-base font-semibold">DocuBrix</div>
-              <div className="text-xs text-slate-500">Document intelligence</div>
-            </div>
+          <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
+            <Link to="/dashboard" className="flex items-center">
+              <img src="/docubrix-logo.png" alt="DocuBrix" className="h-8 w-auto object-contain" />
+            </Link>
+            <div className="mt-1 text-xs text-slate-500">Document intelligence</div>
           </div>
 
           <nav className="space-y-1">
@@ -268,7 +267,10 @@ function ProtectedLayout({ user, children, mobileOpen, setMobileOpen, onLogout }
                 >
                   <Menu className="h-5 w-5" />
                 </Button>
-                <div>
+                <Link to="/dashboard" className="flex items-center lg:hidden">
+                  <img src="/docubrix-logo.png" alt="DocuBrix" className="h-6 w-auto object-contain" />
+                </Link>
+                <div className="hidden lg:block">
                   <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Workspace</div>
                   <div className="text-lg font-semibold text-slate-900">{currentTitle}</div>
                 </div>
@@ -348,12 +350,11 @@ function AuthPage({ mode, setUser }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10">
       <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-soft sm:p-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-lg font-bold text-white">D</div>
-          <div>
-            <div className="text-2xl font-bold">DocuBrix</div>
-            <div className="text-sm text-slate-500">Document intelligence workspace</div>
-          </div>
+        <div className="mb-6">
+          <Link to="/login" className="inline-block">
+            <img src="/docubrix-logo.png" alt="DocuBrix" className="h-10 w-auto object-contain" />
+          </Link>
+          <div className="mt-1 text-sm text-slate-500">Document intelligence workspace</div>
         </div>
 
         <div className="mb-6">

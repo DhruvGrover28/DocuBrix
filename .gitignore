@@ -18,6 +18,8 @@ Thumbs.db
 *.log
 .cache/
 .pytest_cache/
+frontend/node_modules/
+frontend/dist/
 data/
 !frontend/src/data/
 !frontend/src/data/mockData.js

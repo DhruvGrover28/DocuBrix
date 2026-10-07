@@ -11,7 +11,7 @@ if not logger.handlers and not logging.getLogger().handlers:
     logging.basicConfig(level=logging.INFO)
 
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import or_
 
@@ -33,7 +33,6 @@ from backend.app.services.document_processor import (
 )
 from backend.app.services.classifier import classify_document_result
 from backend.app.services.knowledge import (
-    batch_embed_texts,
     chunk_text,
     cosine_similarity,
     extract_excerpts,
@@ -530,8 +529,55 @@ def get_document(document_id: str, user: User = Depends(get_current_user)) -> di
     }
 
 
+def generate_document_embeddings_bg(document_id: str, owner_id: str) -> None:
+    if not is_embedding_configured() or SessionLocal is None:
+        return
+    try:
+        with SessionLocal() as session:
+            chunks = (
+                session.query(DocumentChunk)
+                .filter(
+                    DocumentChunk.document_id == document_id,
+                    DocumentChunk.owner_id == owner_id,
+                )
+                .order_by(DocumentChunk.chunk_index.asc())
+                .all()
+            )
+            if not chunks:
+                return
+
+            updated = False
+            for chunk in chunks[:50]:
+                if chunk.embedding is not None:
+                    continue
+                try:
+                    emb = get_embedding(chunk.content)
+                    if emb:
+                        chunk.embedding = emb
+                        updated = True
+                except Exception as exc:
+                    logger.warning(
+                        "[Embedding Background] Failed to generate embedding for doc %s chunk %s: %s",
+                        document_id,
+                        chunk.chunk_index,
+                        exc,
+                    )
+            if updated:
+                session.commit()
+    except Exception as exc:
+        logger.error(
+            "[Embedding Background] Unexpected error in background embedding for doc %s: %s",
+            document_id,
+            exc,
+        )
+
+
 @app.post("/documents/upload")
-async def upload_document(file: UploadFile = File(...), user: User = Depends(get_current_user)) -> dict[str, Any]:
+def upload_document(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
     if not file.filename:
         raise HTTPException(status_code=400, detail="A file is required for document processing.")
 
@@ -544,7 +590,7 @@ async def upload_document(file: UploadFile = File(...), user: User = Depends(get
             detail=f"Unsupported file type '.{extension}'. Supported types: {', '.join(sorted(allowed_extensions))}.",
         )
 
-    file_bytes = await file.read()
+    file_bytes = file.file.read()
     if not file_bytes:
         raise HTTPException(status_code=400, detail="The uploaded file is empty.")
 
@@ -607,32 +653,24 @@ async def upload_document(file: UploadFile = File(...), user: User = Depends(get
             session.add(document)
             session.flush()
             chunks_text = chunk_text(cleaned_text)
-            embeddings = None
-            if is_embedding_configured():
-                try:
-                    embeddings = batch_embed_texts(chunks_text)
-                except Exception:
-                    embeddings = None
 
             for index, content in enumerate(chunks_text):
-                chunk_emb = (
-                    embeddings[index]
-                    if embeddings and index < len(embeddings) and embeddings[index]
-                    else None
-                )
                 session.add(
                     DocumentChunk(
                         owner_id=user.id,
                         document_id=document.id,
                         chunk_index=index,
                         content=content,
-                        embedding=chunk_emb,
+                        embedding=None,
                     )
                 )
             session.commit()
             record["document_id"] = document.id
     except Exception as exc:
         raise HTTPException(status_code=500, detail="The processed document could not be persisted.") from exc
+
+    if is_embedding_configured():
+        background_tasks.add_task(generate_document_embeddings_bg, document.id, user.id)
 
     return record
 

@@ -14,10 +14,30 @@ if not logger.handlers and not logging.getLogger().handlers:
     logging.basicConfig(level=logging.INFO)
 
 
+def _clean_api_key(key: str | None) -> str:
+    if not key:
+        return ""
+    return key.strip().strip("'\"").strip()
+
+
+def get_gemini_api_key() -> str:
+    return _clean_api_key(os.getenv("GEMINI_API_KEY"))
+
+
+def get_embedding_api_key() -> str:
+    key = _clean_api_key(os.getenv("EMBEDDING_API_KEY"))
+    if key:
+        return key
+    return get_gemini_api_key()
+
+
 def _sanitize_diagnostic_text(text: str, api_key: str | None = None) -> str:
     if not text:
         return ""
     sanitized = text
+    cleaned_key = _clean_api_key(api_key)
+    if cleaned_key:
+        sanitized = sanitized.replace(cleaned_key, "[REDACTED_API_KEY]")
     if api_key and api_key.strip():
         sanitized = sanitized.replace(api_key.strip(), "[REDACTED_API_KEY]")
     # Redact Google API key format
@@ -26,7 +46,7 @@ def _sanitize_diagnostic_text(text: str, api_key: str | None = None) -> str:
     sanitized = re.sub(r"([?&]key=)[^&\s]+", r"\1[REDACTED_KEY]", sanitized)
     # Redact key in JSON/headers
     sanitized = re.sub(
-        r'("?(?:api[_-]?key|key)"?\s*[:=]\s*"?[A-Za-z0-9_\-]+"?\b)',
+        r'("?(?:api[_-]?key|key|x-goog-api-key)"?\s*[:=]\s*"?[A-Za-z0-9_\-]+"?\b)',
         "[REDACTED_KEY]",
         sanitized,
         flags=re.IGNORECASE,
@@ -68,15 +88,15 @@ def cosine_similarity(a: list[float] | None, b: list[float] | None) -> float:
 
 
 def is_embedding_configured() -> bool:
-    return bool(os.getenv("EMBEDDING_API_KEY") or os.getenv("GEMINI_API_KEY"))
+    return bool(get_embedding_api_key())
 
 
 def is_llm_configured() -> bool:
-    return bool(os.getenv("GEMINI_API_KEY"))
+    return bool(get_gemini_api_key())
 
 
 def get_embedding(text: str) -> list[float]:
-    api_key = os.getenv("EMBEDDING_API_KEY") or os.getenv("GEMINI_API_KEY")
+    api_key = get_embedding_api_key()
     model = os.getenv("EMBEDDING_MODEL", "gemini-embedding-2")
     if not api_key:
         raise RuntimeError("Embedding API key is not configured.")
@@ -89,7 +109,15 @@ def get_embedding(text: str) -> list[float]:
         "model": f"models/{model}",
         "content": {"parts": [{"text": cleaned[:2048]}]}
     }).encode("utf-8")
-    request = urllib.request.Request(endpoint, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    request = urllib.request.Request(
+        endpoint,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": api_key,
+        },
+        method="POST",
+    )
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
             data = json.loads(response.read().decode("utf-8"))
@@ -250,9 +278,9 @@ def build_gemini_prompt(question: str, sources: list[dict[str, Any]]) -> str:
 
 
 def generate_grounded_answer(question: str, sources: list[dict[str, Any]]) -> str:
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = get_gemini_api_key()
     model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-    if not api_key or not api_key.strip():
+    if not api_key:
         logger.error(
             "[Gemini Diagnostic] [missing_api_key] GEMINI_API_KEY is not configured or empty. Requested model: %s",
             model,
@@ -265,7 +293,15 @@ def generate_grounded_answer(question: str, sources: list[dict[str, Any]]) -> st
         prompt = build_gemini_prompt(question, sources)
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
-        request = urllib.request.Request(endpoint, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+        request = urllib.request.Request(
+            endpoint,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": api_key,
+            },
+            method="POST",
+        )
     except Exception as exc:
         logger.error(
             "[Gemini Diagnostic] [request_construction_error] Failed to construct Gemini request. Exception: %s, Message: %s, Model: %s",
@@ -277,7 +313,7 @@ def generate_grounded_answer(question: str, sources: list[dict[str, Any]]) -> st
 
     raw_response_text = ""
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=60) as response:
             raw_response_text = response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         raw_error_body = ""
@@ -299,7 +335,7 @@ def generate_grounded_answer(question: str, sources: list[dict[str, Any]]) -> st
         raise RuntimeError("The configured Gemini service could not answer the question.") from exc
     except TimeoutError as exc:
         logger.error(
-            "[Gemini Diagnostic] [timeout_network_error] Gemini API request timed out after 30s. Exception: %s, Model: %s",
+            "[Gemini Diagnostic] [timeout_network_error] Gemini API request timed out after 60s. Exception: %s, Model: %s",
             exc.__class__.__name__,
             model,
         )
@@ -402,9 +438,9 @@ def generate_chat_answer(
     sources: list[dict[str, Any]],
     chat_history: list[dict[str, str]] | None = None,
 ) -> str:
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = get_gemini_api_key()
     model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-    if not api_key or not api_key.strip():
+    if not api_key:
         logger.error(
             "[Gemini Diagnostic] [missing_api_key] GEMINI_API_KEY is not configured or empty. Requested model: %s",
             model,
@@ -415,7 +451,15 @@ def generate_chat_answer(
         prompt = build_chat_prompt(question, sources, chat_history=chat_history)
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
-        request = urllib.request.Request(endpoint, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+        request = urllib.request.Request(
+            endpoint,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": api_key,
+            },
+            method="POST",
+        )
     except Exception as exc:
         logger.error(
             "[Gemini Diagnostic] [request_construction_error] Failed to construct Gemini chat request. Exception: %s, Message: %s, Model: %s",
@@ -427,7 +471,7 @@ def generate_chat_answer(
 
     raw_response_text = ""
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=60) as response:
             raw_response_text = response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         raw_error_body = ""
@@ -449,7 +493,7 @@ def generate_chat_answer(
         raise RuntimeError("The configured Gemini service could not answer the question.") from exc
     except TimeoutError as exc:
         logger.error(
-            "[Gemini Diagnostic] [timeout_network_error] Gemini API chat request timed out after 30s. Exception: %s, Model: %s",
+            "[Gemini Diagnostic] [timeout_network_error] Gemini API chat request timed out after 60s. Exception: %s, Model: %s",
             exc.__class__.__name__,
             model,
         )

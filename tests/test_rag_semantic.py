@@ -149,8 +149,61 @@ def test_generate_grounded_answer_model_urls(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash-lite")
     with patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen:
         generate_grounded_answer("Question?", sources)
+        req2 = mock_urlopen.call_args[0][0]
+        assert "models/gemini-3.8-flash-lite:generateContent" in req2.full_url
+
+
+def test_gemini_api_key_cleaning_and_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.app.services.knowledge import _clean_api_key, get_embedding_api_key, get_gemini_api_key
+
+    # Surrounding whitespace and quotes
+    assert _clean_api_key(' "AIzaSyTestKey123" ') == "AIzaSyTestKey123"
+    assert _clean_api_key(" 'AIzaSySingleQuote' ") == "AIzaSySingleQuote"
+    assert _clean_api_key(None) == ""
+
+    monkeypatch.setenv("GEMINI_API_KEY", ' "AIzaSyTestKey123" \n')
+    assert get_gemini_api_key() == "AIzaSyTestKey123"
+    assert get_embedding_api_key() == "AIzaSyTestKey123"
+    assert is_llm_configured() is True
+    assert is_embedding_configured() is True
+
+    mock_emb_payload = {"embedding": {"values": [0.1, 0.2]}}
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = json.dumps(mock_emb_payload).encode("utf-8")
+    mock_resp.__enter__.return_value = mock_resp
+
+    with patch("urllib.request.urlopen", return_value=mock_resp) as mock_urlopen:
+        get_embedding("Test text")
         req = mock_urlopen.call_args[0][0]
-        assert "models/gemini-3.8-flash-lite:generateContent" in req.full_url
+        assert req.headers.get("X-goog-api-key") == "AIzaSyTestKey123"
+        assert "key=AIzaSyTestKey123" in req.full_url
+        assert '"' not in req.full_url
+
+    mock_chat_payload = {"candidates": [{"content": {"parts": [{"text": "Answer text"}]}}]}
+    mock_chat_resp = MagicMock()
+    mock_chat_resp.read.return_value = json.dumps(mock_chat_payload).encode("utf-8")
+    mock_chat_resp.__enter__.return_value = mock_chat_resp
+
+    with patch("urllib.request.urlopen", return_value=mock_chat_resp) as mock_urlopen:
+        sources = [{"filename": "doc.pdf", "chunk_index": 0, "content": "Sample"}]
+        generate_grounded_answer("Question?", sources)
+        req = mock_urlopen.call_args[0][0]
+        assert req.headers.get("X-goog-api-key") == "AIzaSyTestKey123"
+        assert "key=AIzaSyTestKey123" in req.full_url
+        assert '"' not in req.full_url
+
+
+def test_generate_grounded_answer_timeout_is_60s(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    mock_payload = {"candidates": [{"content": {"parts": [{"text": "Answer"}]}}]}
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps(mock_payload).encode("utf-8")
+    mock_response.__enter__.return_value = mock_response
+
+    sources = [{"filename": "doc.pdf", "chunk_index": 0, "content": "Sample"}]
+    with patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen:
+        generate_grounded_answer("Question?", sources)
+        assert mock_urlopen.call_args[1].get("timeout") == 60
 
 
 def test_search_status_model_metadata(monkeypatch: pytest.MonkeyPatch) -> None:

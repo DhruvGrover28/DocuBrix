@@ -24,7 +24,7 @@ from backend.app.services.document_processor import (
     validate_extracted_fields,
 )
 from backend.app.services.classifier import classify_document_result
-from backend.app.services.knowledge import chunk_text, generate_grounded_answer, query_terms
+from backend.app.services.knowledge import chunk_text, extract_excerpts, generate_grounded_answer, query_terms
 
 app = FastAPI(
     title=APP_NAME,
@@ -285,12 +285,26 @@ def document_summary(user: User = Depends(get_current_user)) -> dict[str, Any]:
 def search_documents(
     q: str = Query(min_length=1),
     document_type: str | None = None,
+    status: str | None = None,
     user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     terms = query_terms(q)
     if not terms:
-        return {"documents": [], "count": 0}
+        return {
+            "documents": [],
+            "count": 0,
+            "query": q,
+            "filters": {"document_type": document_type, "status": status},
+        }
+
     with SessionLocal() as session:
+        chunk_filter = [DocumentChunk.content.ilike(f"%{term}%") for term in terms]
+        chunk_query = session.query(DocumentChunk).filter(or_(*chunk_filter))
+        if user.role != "admin":
+            chunk_query = chunk_query.filter(DocumentChunk.owner_id == user.id)
+        matching_chunks = chunk_query.all()
+        matching_chunk_doc_ids = {chunk.document_id for chunk in matching_chunks}
+
         query = document_query(session, user)
         conditions = []
         for term in terms:
@@ -303,12 +317,50 @@ def search_documents(
                     Document.status.ilike(pattern),
                 )
             )
-        query = query.filter(or_(*conditions))
-        if document_type:
+
+        if matching_chunk_doc_ids:
+            query = query.filter(or_(or_(*conditions), Document.id.in_(matching_chunk_doc_ids)))
+        else:
+            query = query.filter(or_(*conditions))
+
+        if document_type and document_type != "all":
             query = query.filter(Document.document_type == document_type)
+        if status and status != "all":
+            query = query.filter(Document.status == status)
+
         documents = query.order_by(Document.upload_time.desc()).all()
-    serialized = [serialize_document(document) for document in documents]
-    return {"documents": serialized, "count": len(serialized), "query": q}
+        serialized = []
+        for document in documents:
+            doc_dict = serialize_document(document)
+            excerpts = extract_excerpts(document.raw_text or "", terms, max_excerpts=3)
+            doc_dict["excerpts"] = excerpts
+            doc_dict["matching_chunk_indices"] = [
+                chunk.chunk_index for chunk in matching_chunks if chunk.document_id == document.id
+            ]
+            serialized.append(doc_dict)
+
+    return {
+        "documents": serialized,
+        "count": len(serialized),
+        "query": q,
+        "filters": {"document_type": document_type, "status": status},
+    }
+
+
+@app.get("/documents/search/status")
+def search_status(user: User = Depends(get_current_user)) -> dict[str, Any]:
+    return {
+        "keyword_search": {
+            "available": True,
+            "fields": ["filename", "raw_text", "document_type", "status", "chunk_content"],
+            "features": ["multi_term", "excerpts", "type_filter", "status_filter", "chunk_matching"],
+        },
+        "semantic_search": {
+            "available": False,
+            "provider": None,
+            "reason": "Dense embedding provider is not configured. Configure an embedding service to enable vector similarity search.",
+        },
+    }
 
 
 @app.get("/documents/search/semantic")
@@ -317,6 +369,37 @@ def semantic_search_documents(q: str = Query(min_length=1), user: User = Depends
         status_code=503,
         detail="Semantic search is unavailable until an embedding provider is configured.",
     )
+
+
+@app.get("/documents/{document_id}/chunks")
+def get_document_chunks(document_id: str, user: User = Depends(get_current_user)) -> dict[str, Any]:
+    with SessionLocal() as session:
+        document = document_query(session, user).filter(Document.id == document_id).first()
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found.")
+        chunks = (
+            session.query(DocumentChunk)
+            .filter(
+                DocumentChunk.document_id == document_id,
+                DocumentChunk.owner_id == user.id if user.role != "admin" else True,
+            )
+            .order_by(DocumentChunk.chunk_index.asc())
+            .all()
+        )
+        return {
+            "document_id": document.id,
+            "filename": document.filename,
+            "chunk_count": len(chunks),
+            "chunks": [
+                {
+                    "id": chunk.id,
+                    "chunk_index": chunk.chunk_index,
+                    "content": chunk.content,
+                    "created_at": chunk.created_at.isoformat() if chunk.created_at else None,
+                }
+                for chunk in chunks
+            ],
+        }
 
 
 @app.get("/documents/{document_id}")
@@ -534,6 +617,7 @@ def delete_document(document_id: str, user: User = Depends(get_current_user)) ->
         document = document_query(session, user).filter(Document.id == document_id).first()
         if document is None:
             raise HTTPException(status_code=404, detail="Document not found.")
+        session.query(DocumentChunk).filter(DocumentChunk.document_id == document.id).delete(synchronize_session=False)
         session.delete(document)
         session.commit()
     return {"document_id": document_id, "status": "deleted"}

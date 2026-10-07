@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import relationship
 
 from backend.app.db.database import Base
 
@@ -33,6 +34,7 @@ class Document(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
+    chunks = relationship("DocumentChunk", backref="document", cascade="all, delete-orphan", passive_deletes=True)
 
 
 class DocumentChunk(Base):

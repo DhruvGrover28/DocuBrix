@@ -681,11 +681,14 @@ function LibraryPage() {
   }, [])
 
   useEffect(() => {
-    if (!searchQuery.trim()) return undefined
+    if (!searchQuery.trim()) {
+      fetchDocuments().then(setDocuments).catch(() => {})
+      return undefined
+    }
     const timer = setTimeout(async () => {
       try {
         setLoading(true)
-        setDocuments(await searchDocuments(searchQuery, typeFilter))
+        setDocuments(await searchDocuments(searchQuery, typeFilter, statusFilter))
       } catch (error) {
         toast.error(error.response?.data?.detail || error.message || 'Unable to search documents.')
       } finally {
@@ -693,7 +696,7 @@ function LibraryPage() {
       }
     }, 250)
     return () => clearTimeout(timer)
-  }, [searchQuery, typeFilter])
+  }, [searchQuery, typeFilter, statusFilter])
 
   const filteredDocuments = documents.filter((item) => {
     const typeMatch = typeFilter === 'all' || (item.document_type || 'unknown') === typeFilter
@@ -750,7 +753,15 @@ function LibraryPage() {
               <tbody className="divide-y divide-slate-200">
                 {filteredDocuments.map((document) => (
                   <tr key={document.document_id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-900">{document.filename}</td>
+                    <td className="px-4 py-3 font-medium text-slate-900">
+                      <div>{document.filename}</div>
+                      {document.excerpts && document.excerpts.length > 0 && (
+                        <div
+                          className="mt-1 text-xs font-normal text-slate-500 max-w-md line-clamp-2 [&>mark]:bg-amber-100 [&>mark]:text-amber-900 [&>mark]:rounded [&>mark]:px-0.5"
+                          dangerouslySetInnerHTML={{ __html: document.excerpts[0] }}
+                        />
+                      )}
+                    </td>
                     <td className="px-4 py-3">{document.document_type || 'unknown'}</td>
                     <td className="px-4 py-3"><Badge variant={statusColors[document.status] || 'muted'}>{document.status || 'unknown'}</Badge></td>
                     <td className="px-4 py-3">{safeFloat((document.confidence || {}).overall)?.toFixed(2) || 'N/A'}</td>

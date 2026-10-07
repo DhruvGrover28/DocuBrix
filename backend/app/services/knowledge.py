@@ -7,6 +7,7 @@ import urllib.request
 from typing import Any
 
 
+import math
 import re
 
 
@@ -29,6 +30,62 @@ def query_terms(question: str) -> list[str]:
     tokens = re.findall(r"[A-Za-z0-9_\-\$]+", (question or "").lower())
     filtered = [term for term in tokens if len(term) >= 2]
     return filtered if filtered else [term for term in tokens if term]
+
+
+def cosine_similarity(a: list[float] | None, b: list[float] | None) -> float:
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(y * y for y in b))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return round(dot / (norm_a * norm_b), 6)
+
+
+def is_embedding_configured() -> bool:
+    return bool(os.getenv("EMBEDDING_API_KEY") or os.getenv("GEMINI_API_KEY"))
+
+
+def is_llm_configured() -> bool:
+    return bool(os.getenv("GEMINI_API_KEY"))
+
+
+def get_embedding(text: str) -> list[float]:
+    api_key = os.getenv("EMBEDDING_API_KEY") or os.getenv("GEMINI_API_KEY")
+    model = os.getenv("EMBEDDING_MODEL", "text-embedding-004")
+    if not api_key:
+        raise RuntimeError("Embedding API key is not configured.")
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return []
+
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent?key={api_key}"
+    payload = json.dumps({
+        "model": f"models/{model}",
+        "content": {"parts": [{"text": cleaned[:2048]}]}
+    }).encode("utf-8")
+    request = urllib.request.Request(endpoint, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            values = data.get("embedding", {}).get("values", [])
+            return [round(float(v), 6) for v in values]
+    except Exception as exc:
+        raise RuntimeError(f"Embedding request failed: {exc}") from exc
+
+
+def batch_embed_texts(texts: list[str]) -> list[list[float]]:
+    embeddings: list[list[float]] = []
+    for text in texts:
+        if not text.strip():
+            embeddings.append([])
+            continue
+        try:
+            embeddings.append(get_embedding(text))
+        except Exception:
+            embeddings.append([])
+    return embeddings
 
 
 def extract_snippet(text: str, terms: list[str], max_len: int = 160) -> str:
@@ -104,15 +161,61 @@ def extract_excerpts(text: str, terms: list[str], max_excerpts: int = 3, max_len
     return excerpts
 
 
+def rank_chunks_by_relevance(
+    question: str,
+    chunks: list[Any],
+    filename: str = "document",
+    top_k: int = 5,
+) -> list[dict[str, Any]]:
+    if not chunks:
+        return []
+
+    terms = query_terms(question)
+    has_embeddings = any(bool(getattr(chunk, "embedding", None)) for chunk in chunks)
+    query_emb = None
+
+    if has_embeddings and is_embedding_configured():
+        try:
+            query_emb = get_embedding(question)
+        except Exception:
+            query_emb = None
+
+    scored: list[tuple[Any, float, str]] = []
+    for chunk in chunks:
+        content = str(getattr(chunk, "content", "") or "")
+        emb = getattr(chunk, "embedding", None)
+        if query_emb and emb:
+            sim = cosine_similarity(query_emb, emb)
+            scored.append((chunk, sim, "semantic"))
+        else:
+            term_matches = sum(term in content.lower() for term in terms) if terms else 0
+            scored.append((chunk, float(term_matches), "keyword"))
+
+    scored.sort(key=lambda item: item[1], reverse=True)
+    selected = scored[:top_k]
+
+    return [
+        {
+            "document_id": getattr(chunk, "document_id", None),
+            "filename": filename,
+            "chunk_index": getattr(chunk, "chunk_index", 0),
+            "content": getattr(chunk, "content", ""),
+            "relevance_score": round(score, 4),
+            "retrieval_method": method,
+        }
+        for chunk, score, method in selected
+    ]
+
+
 def build_gemini_prompt(question: str, sources: list[dict[str, Any]]) -> str:
     context = "\n\n".join(
         f"[Source {index + 1}: {source['filename']} chunk {source['chunk_index']}]\n{source['content']}"
         for index, source in enumerate(sources)
     )
     return (
-        "Answer the question only from the supplied document context. "
-        "If the context does not contain the answer, say that it is unavailable. "
-        "Do not invent facts or citations.\n\n"
+        "Answer the question strictly from the supplied document context below. "
+        "If the context does not contain enough information to answer, state clearly that the answer is unavailable in the document. "
+        "Do not invent facts, numbers, or citations.\n\n"
         f"Question: {question}\n\nContext:\n{context}"
     )
 
@@ -123,7 +226,7 @@ def generate_grounded_answer(question: str, sources: list[dict[str, Any]]) -> st
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY is not configured.")
     if not sources:
-        return "The available documents do not contain enough information to answer this question."
+        return "The available document content does not contain enough information to answer this question."
 
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     payload = json.dumps({"contents": [{"parts": [{"text": build_gemini_prompt(question, sources)}]}]}).encode("utf-8")

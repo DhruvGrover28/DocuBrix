@@ -24,7 +24,19 @@ from backend.app.services.document_processor import (
     validate_extracted_fields,
 )
 from backend.app.services.classifier import classify_document_result
-from backend.app.services.knowledge import chunk_text, extract_excerpts, generate_grounded_answer, query_terms
+from backend.app.services.knowledge import (
+    batch_embed_texts,
+    chunk_text,
+    cosine_similarity,
+    extract_excerpts,
+    extract_highlighted_snippet,
+    generate_grounded_answer,
+    get_embedding,
+    is_embedding_configured,
+    is_llm_configured,
+    query_terms,
+    rank_chunks_by_relevance,
+)
 
 app = FastAPI(
     title=APP_NAME,
@@ -356,19 +368,66 @@ def search_status(user: User = Depends(get_current_user)) -> dict[str, Any]:
             "features": ["multi_term", "excerpts", "type_filter", "status_filter", "chunk_matching"],
         },
         "semantic_search": {
-            "available": False,
-            "provider": None,
-            "reason": "Dense embedding provider is not configured. Configure an embedding service to enable vector similarity search.",
+            "available": is_embedding_configured(),
+            "provider": "google-gemini (text-embedding-004)" if is_embedding_configured() else None,
+            "reason": None if is_embedding_configured() else "Dense embedding provider is not configured. Configure GEMINI_API_KEY to enable vector similarity search.",
+        },
+        "llm_qa": {
+            "available": is_llm_configured(),
+            "model": "gemini-2.0-flash" if is_llm_configured() else None,
+            "reason": None if is_llm_configured() else "GEMINI_API_KEY is not configured.",
         },
     }
 
 
 @app.get("/documents/search/semantic")
-def semantic_search_documents(q: str = Query(min_length=1), user: User = Depends(get_current_user)) -> dict[str, Any]:
-    raise HTTPException(
-        status_code=503,
-        detail="Semantic search is unavailable until an embedding provider is configured.",
-    )
+def semantic_search_documents(
+    q: str = Query(min_length=1),
+    top_k: int = Query(default=5, ge=1, le=20),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    if not is_embedding_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Semantic search is unavailable until an embedding provider is configured.",
+        )
+    try:
+        query_emb = get_embedding(q)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Failed to generate query embedding: {exc}") from exc
+
+    with SessionLocal() as session:
+        chunk_query = session.query(DocumentChunk).filter(DocumentChunk.embedding.isnot(None))
+        if user.role != "admin":
+            chunk_query = chunk_query.filter(DocumentChunk.owner_id == user.id)
+        candidate_chunks = chunk_query.all()
+        if not candidate_chunks:
+            return {"documents": [], "count": 0, "query": q, "method": "semantic"}
+
+        scored_chunks: list[tuple[Any, float]] = []
+        for chunk in candidate_chunks:
+            sim = cosine_similarity(query_emb, chunk.embedding)
+            if sim > 0.0:
+                scored_chunks.append((chunk, sim))
+
+        scored_chunks.sort(key=lambda item: item[1], reverse=True)
+        top_chunks = scored_chunks[:top_k]
+
+        seen_doc_ids: set[str] = set()
+        results = []
+        for chunk, sim in top_chunks:
+            if chunk.document_id in seen_doc_ids:
+                continue
+            seen_doc_ids.add(chunk.document_id)
+            doc = session.query(Document).filter(Document.id == chunk.document_id).first()
+            if doc:
+                serialized = serialize_document(doc)
+                serialized["similarity"] = round(sim, 4)
+                serialized["matched_chunk_index"] = chunk.chunk_index
+                serialized["excerpts"] = [extract_highlighted_snippet(chunk.content, query_terms(q), max_len=160)]
+                results.append(serialized)
+
+    return {"documents": results, "count": len(results), "query": q, "method": "semantic"}
 
 
 @app.get("/documents/{document_id}/chunks")
@@ -513,13 +572,27 @@ async def upload_document(file: UploadFile = File(...), user: User = Depends(get
             )
             session.add(document)
             session.flush()
-            for index, content in enumerate(chunk_text(cleaned_text)):
+            chunks_text = chunk_text(cleaned_text)
+            embeddings = None
+            if is_embedding_configured():
+                try:
+                    embeddings = batch_embed_texts(chunks_text)
+                except Exception:
+                    embeddings = None
+
+            for index, content in enumerate(chunks_text):
+                chunk_emb = (
+                    embeddings[index]
+                    if embeddings and index < len(embeddings) and embeddings[index]
+                    else None
+                )
                 session.add(
                     DocumentChunk(
                         owner_id=user.id,
                         document_id=document.id,
                         chunk_index=index,
                         content=content,
+                        embedding=chunk_emb,
                     )
                 )
             session.commit()
@@ -539,25 +612,29 @@ def ask_document(document_id: str, payload: dict[str, Any], user: User = Depends
         document = document_query(session, user).filter(Document.id == document_id).first()
         if document is None:
             raise HTTPException(status_code=404, detail="Document not found.")
-        terms = query_terms(question)
-        chunks = session.query(DocumentChunk).filter(
-            DocumentChunk.document_id == document_id,
-            DocumentChunk.owner_id == user.id,
-        ).all()
-        ranked = sorted(
-            chunks,
-            key=lambda chunk: sum(term in chunk.content.lower() for term in terms),
-            reverse=True,
+
+        chunks = (
+            session.query(DocumentChunk)
+            .filter(
+                DocumentChunk.document_id == document_id,
+                DocumentChunk.owner_id == user.id if user.role != "admin" else True,
+            )
+            .order_by(DocumentChunk.chunk_index.asc())
+            .all()
         )
-        sources = [
-            {"document_id": document.id, "filename": document.filename, "chunk_index": chunk.chunk_index, "content": chunk.content}
-            for chunk in ranked[:5]
-            if not terms or any(term in chunk.content.lower() for term in terms)
-        ]
+        sources = rank_chunks_by_relevance(question, chunks, filename=document.filename, top_k=5)
+
+    if not is_llm_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Grounded Q&A is unavailable because GEMINI_API_KEY is not configured.",
+        )
+
     try:
         answer = generate_grounded_answer(question, sources)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     return {"answer": answer, "sources": sources}
 
 
@@ -567,10 +644,53 @@ def similar_documents(document_id: str, user: User = Depends(get_current_user)) 
         document = document_query(session, user).filter(Document.id == document_id).first()
         if document is None:
             raise HTTPException(status_code=404, detail="Document not found.")
-    raise HTTPException(
-        status_code=503,
-        detail="Similar-document search is unavailable until an embedding provider is configured.",
-    )
+
+        if not is_embedding_configured():
+            raise HTTPException(
+                status_code=503,
+                detail="Similar-document search is unavailable until an embedding provider is configured.",
+            )
+
+        target_chunks = (
+            session.query(DocumentChunk)
+            .filter(
+                DocumentChunk.document_id == document_id,
+                DocumentChunk.embedding.isnot(None),
+            )
+            .all()
+        )
+        if not target_chunks:
+            return {"document_id": document_id, "similar_documents": [], "count": 0}
+
+        target_vec = [
+            sum(c.embedding[i] for c in target_chunks) / len(target_chunks)
+            for i in range(len(target_chunks[0].embedding))
+        ]
+
+        other_chunks_query = session.query(DocumentChunk).filter(
+            DocumentChunk.document_id != document_id,
+            DocumentChunk.embedding.isnot(None),
+        )
+        if user.role != "admin":
+            other_chunks_query = other_chunks_query.filter(DocumentChunk.owner_id == user.id)
+        other_chunks = other_chunks_query.all()
+
+        doc_similarities: dict[str, float] = {}
+        for chunk in other_chunks:
+            sim = cosine_similarity(target_vec, chunk.embedding)
+            if chunk.document_id not in doc_similarities or sim > doc_similarities[chunk.document_id]:
+                doc_similarities[chunk.document_id] = sim
+
+        sorted_docs = sorted(doc_similarities.items(), key=lambda x: x[1], reverse=True)[:5]
+        results = []
+        for other_id, sim in sorted_docs:
+            other_doc = session.query(Document).filter(Document.id == other_id).first()
+            if other_doc:
+                serialized = serialize_document(other_doc)
+                serialized["similarity"] = round(sim, 4)
+                results.append(serialized)
+
+    return {"document_id": document_id, "similar_documents": results, "count": len(results)}
 
 
 @app.post("/documents/{document_id}/review")

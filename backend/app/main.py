@@ -71,6 +71,8 @@ def get_current_user(authorization: str | None = Header(default=None)) -> User:
         user = session.query(User).filter(User.id == user_id).first()
         if user is None:
             raise HTTPException(status_code=401, detail="User account was not found.")
+        if payload.get("session_version", 0) != user.session_version:
+            raise HTTPException(status_code=401, detail="This session is no longer valid.")
         session.expunge(user)
         return user
 
@@ -134,7 +136,7 @@ def register(payload: dict[str, Any]) -> dict[str, Any]:
         session.commit()
         session.refresh(user)
         response_user = serialize_user(user)
-        token = create_access_token(user.id, user.role)
+        token = create_access_token(user.id, user.role, user.session_version)
     return {"access_token": token, "token_type": "bearer", "user": response_user}
 
 
@@ -150,7 +152,7 @@ def login(payload: dict[str, Any]) -> dict[str, Any]:
         if user is None or not verify_password(password, user.password_hash):
             raise HTTPException(status_code=401, detail="Invalid email or password.")
         response_user = serialize_user(user)
-        token = create_access_token(user.id, user.role)
+        token = create_access_token(user.id, user.role, user.session_version)
     return {"access_token": token, "token_type": "bearer", "user": response_user}
 
 
@@ -161,6 +163,11 @@ def current_user(user: User = Depends(get_current_user)) -> dict[str, Any]:
 
 @app.post("/auth/logout")
 def logout(user: User = Depends(get_current_user)) -> dict[str, str]:
+    with SessionLocal() as session:
+        stored_user = session.query(User).filter(User.id == user.id).first()
+        if stored_user is not None:
+            stored_user.session_version += 1
+            session.commit()
     return {"status": "signed_out"}
 
 

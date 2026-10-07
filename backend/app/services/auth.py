@@ -48,10 +48,11 @@ def _decode(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
 
 
-def create_access_token(user_id: str, role: str) -> str:
+def create_access_token(user_id: str, role: str, session_version: int = 0) -> str:
     payload = {
         "sub": user_id,
         "role": role,
+        "session_version": session_version,
         "jti": str(uuid.uuid4()),
         "exp": int((datetime.now(timezone.utc) + timedelta(days=7)).timestamp()),
     }

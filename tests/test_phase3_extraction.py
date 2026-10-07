@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import uuid
 
 from backend.app.main import app
 
@@ -36,7 +37,7 @@ Amount Due: $120.50
     assert "ocr_confidence" in confidence["signals"]
 
 
-def test_upload_and_review_round_trip_persists_manual_corrections() -> None:
+def test_upload_and_review_round_trip_persists_manual_corrections(db_required) -> None:
     payload = """BANK STATEMENT
 Account: Checking 1234
 Beginning Balance: $1,000.00
@@ -45,9 +46,20 @@ Transaction: Salary deposit $550.25
 """
 
     with TestClient(app) as client:
+        registration = client.post(
+            "/auth/register",
+            json={
+                "name": "Phase 3 Tester",
+                "email": f"phase3-{uuid.uuid4().hex[:10]}@example.com",
+                "password": "correct-password",
+            },
+        )
+        assert registration.status_code == 200, registration.text
+        headers = {"Authorization": f"Bearer {registration.json()['access_token']}"}
         upload_response = client.post(
             "/documents/upload",
             files={"file": ("statement.txt", payload.encode("utf-8"), "text/plain")},
+            headers=headers,
         )
 
         assert upload_response.status_code == 200, upload_response.text
@@ -57,7 +69,7 @@ Transaction: Salary deposit $550.25
         assert extracted["document_type"] == "bank_statement"
         assert extracted["account_name"] == "Checking 1234"
 
-        get_response = client.get(f"/documents/{document_id}")
+        get_response = client.get(f"/documents/{document_id}", headers=headers)
         assert get_response.status_code == 200, get_response.text
         assert get_response.json()["document_type"] == "bank_statement"
 
@@ -69,6 +81,7 @@ Transaction: Salary deposit $550.25
                     "ending_balance": "1550.25",
                 }
             },
+            headers=headers,
         )
 
         assert review_response.status_code == 200, review_response.text

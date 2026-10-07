@@ -1,4 +1,5 @@
 import io
+import uuid
 
 from fastapi.testclient import TestClient
 
@@ -7,7 +8,18 @@ from backend.app.main import app
 client = TestClient(app)
 
 
-def test_upload_and_process_document() -> None:
+def test_upload_and_process_document(db_required) -> None:
+    registration = client.post(
+        "/auth/register",
+        json={
+            "name": "Upload Tester",
+            "email": f"upload-{uuid.uuid4().hex[:10]}@example.com",
+            "password": "correct-password",
+        },
+    )
+    assert registration.status_code == 200, registration.text
+    headers = {"Authorization": f"Bearer {registration.json()['access_token']}"}
+
     pdf_bytes = io.BytesIO()
     import fitz
 
@@ -21,6 +33,7 @@ def test_upload_and_process_document() -> None:
     response = client.post(
         "/documents/upload",
         files={"file": ("invoice_1001.pdf", pdf_bytes.read(), "application/pdf")},
+        headers=headers,
     )
 
     assert response.status_code == 200, response.text

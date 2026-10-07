@@ -36,6 +36,14 @@ DocuBrix is a Python-based financial-document processing prototype for invoice, 
 - Do not commit PostgreSQL data directories, virtual environments, or generated caches.
 - Production settings must use environment variables; no hardcoded local URLs in deployed services.
 
+## Database schema initialization
+
+On backend startup, SQLAlchemy creates missing `users` and `documents` tables. The startup migration also adds the `users.session_version` column and the `documents.owner_id` index/foreign key when they are missing. Existing documents are preserved; legacy rows without an owner remain inaccessible to normal users and are visible only to administrators until explicitly assigned.
+
+Database integration tests are opt-in and require a disposable PostgreSQL database:
+
+`$env:DOCUBRIX_TEST_DATABASE_URL="postgresql+psycopg://..."; pytest -q`
+
 ## Phase 3 approach
 
 The current evaluation prototype uses a lightweight rule-based pipeline with explicit signals instead of an ML-heavy baseline. It combines:

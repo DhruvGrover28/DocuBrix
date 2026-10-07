@@ -8,7 +8,15 @@ from backend.app.config import DATABASE_URL
 
 Base = declarative_base()
 
-engine: Engine | None = create_engine(DATABASE_URL, pool_pre_ping=True) if DATABASE_URL else None
+engine: Engine | None = (
+    create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,
+        connect_args={"connect_timeout": 5} if DATABASE_URL.startswith("postgresql") else {},
+    )
+    if DATABASE_URL
+    else None
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine) if engine else None
 
 
@@ -42,8 +50,22 @@ def ensure_schema() -> None:
 
     Base.metadata.create_all(bind=engine)
     inspector = inspect(engine)
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
     document_columns = {column["name"] for column in inspector.get_columns("documents")}
-    if "owner_id" not in document_columns:
-        with engine.begin() as connection:
+    with engine.begin() as connection:
+        if "session_version" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0"))
+        if "owner_id" not in document_columns:
             connection.execute(text("ALTER TABLE documents ADD COLUMN owner_id VARCHAR"))
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_documents_owner_id ON documents (owner_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_documents_owner_id ON documents (owner_id)"))
+
+        if engine.dialect.name == "postgresql":
+            foreign_keys = {foreign_key["name"] for foreign_key in inspect(connection).get_foreign_keys("documents")}
+            if "fk_documents_owner_id" not in foreign_keys:
+                connection.execute(
+                    text(
+                        "ALTER TABLE documents "
+                        "ADD CONSTRAINT fk_documents_owner_id "
+                        "FOREIGN KEY (owner_id) REFERENCES users (id) NOT VALID"
+                    )
+                )

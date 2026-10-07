@@ -408,7 +408,7 @@ def search_status(user: User = Depends(get_current_user)) -> dict[str, Any]:
         },
         "llm_qa": {
             "available": is_llm_configured(),
-            "model": os.getenv("GEMINI_MODEL", "gemini-2.5-flash") if is_llm_configured() else None,
+            "model": os.getenv("GEMINI_MODEL", "gemini-3.8-flash") if is_llm_configured() else None,
             "reason": None if is_llm_configured() else "GEMINI_API_KEY is not configured.",
         },
     }

@@ -109,13 +109,22 @@ def test_generate_chat_answer_mocked(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_response.read.return_value = json.dumps(mock_payload).encode("utf-8")
     mock_response.__enter__.return_value = mock_response
 
-    with patch("urllib.request.urlopen", return_value=mock_response):
+    with patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen:
+        monkeypatch.delenv("GEMINI_MODEL", raising=False)
         answer = generate_chat_answer(
             "What is the total?",
             [{"filename": "apex_invoice.pdf", "chunk_index": 0, "content": "Total: $34,500"}],
             chat_history=[{"role": "user", "content": "Hi"}],
         )
         assert answer == "Based on apex_invoice.pdf, the total is $34,500.00."
+        req = mock_urlopen.call_args[0][0]
+        assert "models/gemini-3.8-flash:generateContent" in req.full_url
+
+        # Test model override
+        monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash-lite")
+        generate_chat_answer("What is the total?", [])
+        req2 = mock_urlopen.call_args[0][0]
+        assert "models/gemini-3.8-flash-lite:generateContent" in req2.full_url
 
 
 # ============================================================================
@@ -432,11 +441,11 @@ def test_diagnostic_logging_http_error_redacts_api_key(monkeypatch: pytest.Monke
 
     secret_key = "AIzaSyRealSecretKey12345678901234567"
     monkeypatch.setenv("GEMINI_API_KEY", secret_key)
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash")
 
-    error_body = b'{"error": {"code": 404, "message": "models/gemini-2.5-flash is not found for API version v1beta"}}'
+    error_body = b'{"error": {"code": 404, "message": "models/gemini-3.8-flash is not found for API version v1beta"}}'
     http_error = urllib.error.HTTPError(
-        url="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        url="https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
         code=404,
         msg="Not Found",
         hdrs={},
@@ -451,8 +460,8 @@ def test_diagnostic_logging_http_error_redacts_api_key(monkeypatch: pytest.Monke
     assert len(http_records) >= 1
     record_text = http_records[0].message
     assert "404" in record_text
-    assert "models/gemini-2.5-flash is not found" in record_text
-    assert "gemini-2.5-flash" in record_text
+    assert "models/gemini-3.8-flash is not found" in record_text
+    assert "gemini-3.8-flash" in record_text
     assert secret_key not in record_text
 
 

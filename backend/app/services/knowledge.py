@@ -251,7 +251,7 @@ def build_gemini_prompt(question: str, sources: list[dict[str, Any]]) -> str:
 
 def generate_grounded_answer(question: str, sources: list[dict[str, Any]]) -> str:
     api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
     if not api_key or not api_key.strip():
         logger.error(
             "[Gemini Diagnostic] [missing_api_key] GEMINI_API_KEY is not configured or empty. Requested model: %s",
@@ -403,7 +403,7 @@ def generate_chat_answer(
     chat_history: list[dict[str, str]] | None = None,
 ) -> str:
     api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
     if not api_key or not api_key.strip():
         logger.error(
             "[Gemini Diagnostic] [missing_api_key] GEMINI_API_KEY is not configured or empty. Requested model: %s",

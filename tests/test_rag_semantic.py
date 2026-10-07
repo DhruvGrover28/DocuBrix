@@ -143,14 +143,14 @@ def test_generate_grounded_answer_model_urls(monkeypatch: pytest.MonkeyPatch) ->
         ans = generate_grounded_answer("Question?", sources)
         assert ans == "Answer from default model."
         req = mock_urlopen.call_args[0][0]
-        assert "models/gemini-2.5-flash:generateContent" in req.full_url
+        assert "models/gemini-3.8-flash:generateContent" in req.full_url
 
-    # Test override with gemini-2.5-flash-lite
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    # Test override with custom model
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash-lite")
     with patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen:
         generate_grounded_answer("Question?", sources)
         req = mock_urlopen.call_args[0][0]
-        assert "models/gemini-2.5-flash-lite:generateContent" in req.full_url
+        assert "models/gemini-3.8-flash-lite:generateContent" in req.full_url
 
 
 def test_search_status_model_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -174,7 +174,7 @@ def test_search_status_model_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     assert status_configured["semantic_search"]["available"] is True
     assert status_configured["semantic_search"]["provider"] == "google-gemini (gemini-embedding-2)"
     assert status_configured["llm_qa"]["available"] is True
-    assert status_configured["llm_qa"]["model"] == "gemini-2.5-flash"
+    assert status_configured["llm_qa"]["model"] == "gemini-3.8-flash"
 
 
 def test_rank_chunks_by_relevance_keyword_fallback() -> None:

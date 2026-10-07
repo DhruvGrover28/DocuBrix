@@ -38,8 +38,8 @@ import {
 } from 'recharts'
 import { toast } from 'sonner'
 
-import { fetchDocumentById, fetchDocumentSummary, fetchDocuments, fetchHealth, saveReview, uploadDocument } from './api/client'
-import { appShellNav, defaultStats, profileData } from './data/mockData'
+import { AUTH_TOKEN_KEY, fetchAdminOverview, fetchCurrentUser, fetchDocumentById, fetchDocumentSummary, fetchDocuments, fetchHealth, loginUser, logoutUser, registerUser, saveReview, updateCurrentUser, uploadDocument } from './api/client'
+import { appShellNav, defaultStats } from './data/mockData'
 import { Avatar, Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, Input, Select, SelectItem, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from './components/ui'
 import { cn, formatDate, safeFloat } from './lib/utils'
 
@@ -52,25 +52,47 @@ const statusColors = {
 }
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('docubrix-auth') === 'true')
+  const [user, setUser] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
-    localStorage.setItem('docubrix-auth', String(isLoggedIn))
-  }, [isLoggedIn])
+    if (!localStorage.getItem(AUTH_TOKEN_KEY)) {
+      setAuthLoading(false)
+      return undefined
+    }
+
+    fetchCurrentUser()
+      .then(setUser)
+      .catch(() => {
+        localStorage.removeItem(AUTH_TOKEN_KEY)
+        setUser(null)
+      })
+      .finally(() => setAuthLoading(false))
+  }, [])
+
+  const handleLogout = async () => {
+    await logoutUser()
+    setUser(null)
+    setMobileOpen(false)
+  }
+
+  if (authLoading) {
+    return <div className="flex min-h-screen items-center justify-center bg-slate-100 text-sm text-slate-500">Loading your workspace...</div>
+  }
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to={isLoggedIn ? '/dashboard' : '/login'} replace />} />
-      <Route path="/login" element={<AuthPage mode="login" setIsLoggedIn={setIsLoggedIn} />} />
-      <Route path="/register" element={<AuthPage mode="register" setIsLoggedIn={setIsLoggedIn} />} />
-      <Route path="/forgot-password" element={<AuthPage mode="forgot" setIsLoggedIn={setIsLoggedIn} />} />
-      <Route path="/reset-password" element={<AuthPage mode="reset" setIsLoggedIn={setIsLoggedIn} />} />
+      <Route path="/" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
+      <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="login" setUser={setUser} />} />
+      <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="register" setUser={setUser} />} />
+      <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="forgot" setUser={setUser} />} />
+      <Route path="/reset-password" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="reset" setUser={setUser} />} />
       <Route
         path="*"
         element={
-          isLoggedIn ? (
-            <ProtectedLayout mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} setIsLoggedIn={setIsLoggedIn}>
+          user ? (
+            <ProtectedLayout user={user} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} onLogout={handleLogout}>
               <Routes>
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/processing" element={<ProcessingPage />} />
@@ -78,9 +100,9 @@ function App() {
                 <Route path="/documents/:documentId" element={<DocumentDetailPage />} />
                 <Route path="/review" element={<ReviewQueuePage />} />
                 <Route path="/analytics" element={<AnalyticsPage />} />
-                <Route path="/status" element={<SystemStatusPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/settings" element={<SettingsPage />} />
+                {user.role === 'admin' && <Route path="/status" element={<SystemStatusPage />} />}
+                <Route path="/profile" element={<ProfilePage user={user} onUserUpdated={setUser} />} />
+                <Route path="/settings" element={<SettingsPage user={user} />} />
                 <Route path="/team" element={<ComingSoonPage title="Team management" />} />
                 <Route path="/automation" element={<ComingSoonPage title="Workflow automation" />} />
                 <Route path="/reports" element={<ComingSoonPage title="Exports & reports" />} />
@@ -97,9 +119,10 @@ function App() {
   )
 }
 
-function ProtectedLayout({ children, mobileOpen, setMobileOpen, setIsLoggedIn }) {
+function ProtectedLayout({ user, children, mobileOpen, setMobileOpen, onLogout }) {
   const location = useLocation()
   const currentTitle = appShellNav.find((item) => item.path === location.pathname)?.label || 'Dashboard'
+  const visibleNav = appShellNav.filter((item) => item.path !== '/status' || user.role === 'admin')
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
@@ -114,7 +137,7 @@ function ProtectedLayout({ children, mobileOpen, setMobileOpen, setIsLoggedIn })
           </div>
 
           <nav className="space-y-1">
-            {appShellNav.map((item) => (
+            {visibleNav.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
@@ -139,10 +162,10 @@ function ProtectedLayout({ children, mobileOpen, setMobileOpen, setIsLoggedIn })
             <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Workspace</div>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <Avatar initials="AP" className="h-9 w-9 bg-gradient-to-br from-blue-600 to-indigo-400" />
+                <Avatar initials={user.name.slice(0, 2).toUpperCase()} className="h-9 w-9 bg-gradient-to-br from-blue-600 to-indigo-400" />
                 <div>
-                  <div className="text-sm font-semibold">Aisha Patel</div>
-                  <div className="text-xs text-slate-500">Operations Analyst</div>
+                  <div className="text-sm font-semibold">{user.name}</div>
+                  <div className="text-xs capitalize text-slate-500">{user.role}</div>
                 </div>
               </div>
               <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -180,16 +203,13 @@ function ProtectedLayout({ children, mobileOpen, setMobileOpen, setIsLoggedIn })
                   <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" />
                 </Button>
                 <Link to="/profile" className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5">
-                  <Avatar initials="AP" className="h-8 w-8 bg-gradient-to-br from-blue-600 to-indigo-400 text-xs" />
+                  <Avatar initials={user.name.slice(0, 2).toUpperCase()} className="h-8 w-8 bg-gradient-to-br from-blue-600 to-indigo-400 text-xs" />
                   <div className="hidden text-left text-sm md:block">
-                    <div className="font-semibold">Aisha Patel</div>
-                    <div className="text-xs text-slate-500">Admin</div>
+                    <div className="font-semibold">{user.name}</div>
+                    <div className="text-xs capitalize text-slate-500">{user.role}</div>
                   </div>
                 </Link>
-                <Button variant="ghost" size="icon" onClick={() => {
-                  setIsLoggedIn(false)
-                  localStorage.setItem('docubrix-auth', 'false')
-                }}>
+                <Button variant="ghost" size="icon" onClick={onLogout}>
                   <LogOut className="h-4 w-4" />
                 </Button>
               </div>
@@ -203,7 +223,7 @@ function ProtectedLayout({ children, mobileOpen, setMobileOpen, setIsLoggedIn })
   )
 }
 
-function AuthPage({ mode, setIsLoggedIn }) {
+function AuthPage({ mode, setUser }) {
   const navigate = useNavigate()
   const titleMap = {
     login: 'Sign in to DocuBrix',
@@ -215,30 +235,33 @@ function AuthPage({ mode, setIsLoggedIn }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-  const onSubmit = (event) => {
+  const onSubmit = async (event) => {
     event.preventDefault()
-    if (mode === 'login' && email && password) {
-      setIsLoggedIn(true)
+    if (mode === 'forgot' || mode === 'reset') {
+      toast.error('Password reset is not enabled yet. Contact an administrator.')
+      return
+    }
+
+    if (!email || !password || (mode === 'register' && !name)) {
+      toast.error('Please complete the required fields to continue.')
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      const authenticatedUser = mode === 'login'
+        ? await loginUser({ email, password })
+        : await registerUser({ name, email, password })
+      setUser(authenticatedUser)
       navigate('/dashboard')
-      toast.success('Welcome back. You are now signed in.')
-      return
+      toast.success(mode === 'login' ? 'Welcome back. You are now signed in.' : 'Registration complete. Your workspace is ready.')
+    } catch (error) {
+      toast.error(error.response?.data?.detail || error.message || 'Authentication failed.')
+    } finally {
+      setSubmitting(false)
     }
-
-    if (mode === 'register' && name && email && password) {
-      setIsLoggedIn(true)
-      navigate('/dashboard')
-      toast.success('Registration complete. Your workspace is ready.')
-      return
-    }
-
-    if ((mode === 'forgot' || mode === 'reset') && email) {
-      toast.success('A reset link has been prepared for the demo flow.')
-      navigate('/login')
-      return
-    }
-
-    toast.error('Please complete the required fields to continue.')
   }
 
   return (
@@ -261,7 +284,7 @@ function AuthPage({ mode, setIsLoggedIn }) {
           {mode === 'register' && (
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Full name</label>
-              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Aisha Patel" />
+              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your full name" />
             </div>
           )}
 
@@ -279,7 +302,8 @@ function AuthPage({ mode, setIsLoggedIn }) {
             </div>
           )}
 
-          <Button type="submit" className="w-full">
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {mode === 'login' ? 'Sign in' : mode === 'register' ? 'Create account' : mode === 'forgot' ? 'Send reset link' : 'Update password'}
           </Button>
         </form>
@@ -943,13 +967,15 @@ function AnalyticsPage() {
 
 function SystemStatusPage() {
   const [health, setHealth] = useState(null)
+  const [overview, setOverview] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const load = async () => {
       try {
-        const data = await fetchHealth()
+        const [data, adminData] = await Promise.all([fetchHealth(), fetchAdminOverview()])
         setHealth(data)
+        setOverview(adminData)
       } catch (error) {
         toast.error(error.message || 'Unable to load system status.')
       } finally {
@@ -997,14 +1023,40 @@ function SystemStatusPage() {
               <div className="text-sm text-slate-600">OCR status: available when the backend runtime includes Tesseract.</div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>System totals</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-slate-600">
+              <div>Users: {overview?.user_count ?? 'n/a'}</div>
+              <div>Documents: {overview?.document_count ?? 'n/a'}</div>
+              <div>Processed: {overview?.processed_count ?? 'n/a'}</div>
+              <div>Failed: {overview?.failed_count ?? 'n/a'}</div>
+            </CardContent>
+          </Card>
         </div>
       )}
     </>
   )
 }
 
-function ProfilePage() {
-  const profile = profileData
+function ProfilePage({ user, onUserUpdated }) {
+  const [name, setName] = useState(user.name)
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    try {
+      setSaving(true)
+      const updatedUser = await updateCurrentUser({ name })
+      onUserUpdated(updatedUser)
+      toast.success('Profile updated successfully.')
+    } catch (error) {
+      toast.error(error.response?.data?.detail || error.message || 'Unable to update profile.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <>
@@ -1016,10 +1068,10 @@ function ProfilePage() {
             <CardTitle>Account</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col items-center text-center">
-            <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-400 text-2xl font-bold text-white">{profile.avatar}</div>
-            <div className="text-2xl font-semibold text-slate-900">{profile.name}</div>
-            <div className="mt-1 text-sm text-slate-600">{profile.role}</div>
-            <div className="mt-5 text-sm text-slate-600">{profile.organization}</div>
+            <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-400 text-2xl font-bold text-white">{name.slice(0, 2).toUpperCase()}</div>
+            <div className="text-2xl font-semibold text-slate-900">{name}</div>
+            <div className="mt-1 text-sm capitalize text-slate-600">{user.role}</div>
+            <div className="mt-5 text-sm text-slate-600">{user.email}</div>
           </CardContent>
         </Card>
 
@@ -1030,31 +1082,24 @@ function ProfilePage() {
           <CardContent className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Name</label>
-              <Input value={profile.name} readOnly />
+              <Input value={name} onChange={(event) => setName(event.target.value)} />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Email</label>
-              <Input value={profile.email} readOnly />
+              <Input value={user.email} readOnly />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Phone</label>
-              <Input value={profile.phone} readOnly />
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Role</label>
+              <Input value={user.role} readOnly />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Organization</label>
-              <Input value={profile.organization} readOnly />
+              <Input value="DocuBrix workspace" readOnly />
             </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Job title</label>
-              <Input value={profile.role} readOnly />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Location</label>
-              <Input value={profile.location} readOnly />
-            </div>
-            <div className="md:col-span-2">
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Bio</label>
-              <Textarea value={profile.bio} readOnly />
+            <div className="md:col-span-2 flex justify-end">
+              <Button onClick={handleSave} disabled={saving || name.trim().length < 2}>
+                {saving ? 'Saving...' : 'Save profile'}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -1063,7 +1108,7 @@ function ProfilePage() {
   )
 }
 
-function SettingsPage() {
+function SettingsPage({ user }) {
   return (
     <>
       <PageHeader title="Settings" subtitle="Administrative controls for the DocuBrix workspace." />
@@ -1082,14 +1127,14 @@ function SettingsPage() {
             </TabsList>
 
             <TabsContent value="account" className="space-y-4 p-3">
-              <Input value="Aisha Patel" readOnly />
-              <Input value="aisha.patel@docubrix.ai" readOnly />
-              <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-emerald-600" /> <span className="text-sm text-slate-600">Two-factor authentication enabled.</span></div>
+              <Input value={user.name} readOnly />
+              <Input value={user.email} readOnly />
+              <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-emerald-600" /> <span className="text-sm capitalize text-slate-600">Role: {user.role}</span></div>
             </TabsContent>
             <TabsContent value="profile" className="space-y-4 p-3">
-              <Input value="DocuBrix Labs" readOnly />
-              <Input value="Operations Analyst" readOnly />
-              <Textarea value="Document automation specialist focused on financial workflows and operational intelligence." readOnly />
+              <Input value="DocuBrix workspace" readOnly />
+              <Input value={user.role} readOnly />
+              <Textarea value="Your document intelligence workspace." readOnly />
             </TabsContent>
             <TabsContent value="preferences" className="space-y-4 p-3">
               <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3"><span>Enable smart alerts</span><Badge variant="success">On</Badge></div>

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.app.config import APP_ENVIRONMENT, APP_NAME, APP_VERSION
-from backend.app.db.database import Base, SessionLocal, check_database_connection, engine
+from backend.app.config import ADMIN_EMAIL, APP_ENVIRONMENT, APP_NAME, APP_VERSION
+from backend.app.db.database import SessionLocal, check_database_connection, ensure_schema
 from backend.app.models.document import Document
+from backend.app.models.user import User
+from backend.app.services.auth import create_access_token, decode_access_token, hash_password, verify_password
 from backend.app.services.document_processor import (
     build_confidence_report,
     classify_document,
@@ -37,9 +40,145 @@ app.add_middleware(
 @app.on_event("startup")
 def initialize_database() -> None:
     try:
-        Base.metadata.create_all(bind=engine)
+        ensure_schema()
     except Exception:
         pass
+
+
+def serialize_user(user: User) -> dict[str, Any]:
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+    }
+
+
+def get_current_user(authorization: str | None = Header(default=None)) -> User:
+    if SessionLocal is None:
+        raise HTTPException(status_code=503, detail="Database is not configured.")
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Authentication is required.")
+
+    payload = decode_access_token(authorization.split(" ", 1)[1].strip())
+    user_id = payload.get("sub") if payload else None
+    if not isinstance(user_id, str):
+        raise HTTPException(status_code=401, detail="Invalid or expired session.")
+
+    with SessionLocal() as session:
+        user = session.query(User).filter(User.id == user_id).first()
+        if user is None:
+            raise HTTPException(status_code=401, detail="User account was not found.")
+        session.expunge(user)
+        return user
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Administrator access is required.")
+    return user
+
+
+def document_query(session: Any, user: User) -> Any:
+    query = session.query(Document)
+    if user.role != "admin":
+        query = query.filter(Document.owner_id == user.id)
+    return query
+
+
+def serialize_document(document: Document) -> dict[str, Any]:
+    extracted_json = document.extracted_json or {}
+    review_json = document.review_json or {}
+    return {
+        "document_id": document.id,
+        "filename": document.filename,
+        "document_type": document.document_type,
+        "status": document.status,
+        "file_type": document.file_type,
+        "upload_time": document.upload_time.isoformat() if document.upload_time else None,
+        "confidence": document.confidence_scores or {},
+        "validation": extracted_json.get("validation", {}),
+        "extracted_fields": extracted_json.get("extracted_fields", {}),
+        "review_json": review_json,
+        "raw_text": document.raw_text,
+    }
+
+
+@app.post("/auth/register")
+def register(payload: dict[str, Any]) -> dict[str, Any]:
+    name = str(payload.get("name") or "").strip()
+    email = str(payload.get("email") or "").strip().lower()
+    password = str(payload.get("password") or "")
+    if len(name) < 2 or len(name) > 160:
+        raise HTTPException(status_code=400, detail="Name must contain between 2 and 160 characters.")
+    if "@" not in email or len(email) > 320:
+        raise HTTPException(status_code=400, detail="A valid email address is required.")
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must contain at least 8 characters.")
+    if SessionLocal is None:
+        raise HTTPException(status_code=503, detail="Database is not configured.")
+
+    with SessionLocal() as session:
+        if session.query(User).filter(User.email == email).first() is not None:
+            raise HTTPException(status_code=409, detail="An account with this email already exists.")
+        user = User(
+            id=str(uuid.uuid4()),
+            name=name,
+            email=email,
+            password_hash=hash_password(password),
+            role="admin" if ADMIN_EMAIL and email == ADMIN_EMAIL else "user",
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        response_user = serialize_user(user)
+        token = create_access_token(user.id, user.role)
+    return {"access_token": token, "token_type": "bearer", "user": response_user}
+
+
+@app.post("/auth/login")
+def login(payload: dict[str, Any]) -> dict[str, Any]:
+    email = str(payload.get("email") or "").strip().lower()
+    password = str(payload.get("password") or "")
+    if SessionLocal is None:
+        raise HTTPException(status_code=503, detail="Database is not configured.")
+
+    with SessionLocal() as session:
+        user = session.query(User).filter(User.email == email).first()
+        if user is None or not verify_password(password, user.password_hash):
+            raise HTTPException(status_code=401, detail="Invalid email or password.")
+        response_user = serialize_user(user)
+        token = create_access_token(user.id, user.role)
+    return {"access_token": token, "token_type": "bearer", "user": response_user}
+
+
+@app.get("/auth/me")
+def current_user(user: User = Depends(get_current_user)) -> dict[str, Any]:
+    return {"user": serialize_user(user)}
+
+
+@app.post("/auth/logout")
+def logout(user: User = Depends(get_current_user)) -> dict[str, str]:
+    return {"status": "signed_out"}
+
+
+@app.patch("/auth/me")
+def update_current_user(payload: dict[str, Any], user: User = Depends(get_current_user)) -> dict[str, Any]:
+    name = str(payload.get("name") or "").strip()
+    if len(name) < 2 or len(name) > 160:
+        raise HTTPException(status_code=400, detail="Name must contain between 2 and 160 characters.")
+    if SessionLocal is None:
+        raise HTTPException(status_code=503, detail="Database is not configured.")
+    with SessionLocal() as session:
+        stored_user = session.query(User).filter(User.id == user.id).first()
+        if stored_user is None:
+            raise HTTPException(status_code=404, detail="User account was not found.")
+        stored_user.name = name
+        session.commit()
+        session.refresh(stored_user)
+        return {"user": serialize_user(stored_user)}
 
 
 @app.get("/health")
@@ -54,37 +193,38 @@ def health() -> dict[str, Any]:
     }
 
 
-@app.get("/documents")
-def list_documents() -> dict[str, Any]:
+@app.get("/admin/overview")
+def admin_overview(user: User = Depends(require_admin)) -> dict[str, Any]:
     with SessionLocal() as session:
-        documents = session.query(Document).order_by(Document.upload_time.desc()).all()
+        documents = session.query(Document).all()
+        user_count = session.query(User).count()
+    confidence_values = [
+        float((document.confidence_scores or {}).get("overall"))
+        for document in documents
+        if isinstance((document.confidence_scores or {}).get("overall"), (int, float))
+    ]
+    return {
+        "user_count": user_count,
+        "document_count": len(documents),
+        "processed_count": sum(document.status in {"processed", "reviewed"} for document in documents),
+        "failed_count": sum(document.status == "failed" for document in documents),
+        "average_confidence": round(sum(confidence_values) / len(confidence_values), 4) if confidence_values else None,
+    }
 
-    serialized = []
-    for document in documents:
-        extracted_json = document.extracted_json or {}
-        review_json = document.review_json or {}
-        serialized.append(
-            {
-                "document_id": document.id,
-                "filename": document.filename,
-                "document_type": document.document_type,
-                "status": document.status,
-                "file_type": document.file_type,
-                "upload_time": document.upload_time.isoformat() if document.upload_time else None,
-                "confidence": document.confidence_scores or {},
-                "validation": extracted_json.get("validation", {}),
-                "extracted_fields": extracted_json.get("extracted_fields", {}),
-                "review_json": review_json,
-                "raw_text": document.raw_text,
-            }
-        )
+
+@app.get("/documents")
+def list_documents(user: User = Depends(get_current_user)) -> dict[str, Any]:
+    with SessionLocal() as session:
+        documents = document_query(session, user).order_by(Document.upload_time.desc()).all()
+
+    serialized = [serialize_document(document) for document in documents]
 
     return {"documents": serialized, "count": len(serialized)}
 
 
 @app.get("/documents/summary")
-def document_summary() -> dict[str, Any]:
-    documents_payload = list_documents().get("documents", [])
+def document_summary(user: User = Depends(get_current_user)) -> dict[str, Any]:
+    documents_payload = list_documents(user).get("documents", [])
 
     total_documents = len(documents_payload)
     successful_documents = sum(1 for item in documents_payload if item.get("status") in {"processed", "reviewed"})
@@ -125,9 +265,9 @@ def document_summary() -> dict[str, Any]:
 
 
 @app.get("/documents/{document_id}")
-def get_document(document_id: str) -> dict[str, Any]:
+def get_document(document_id: str, user: User = Depends(get_current_user)) -> dict[str, Any]:
     with SessionLocal() as session:
-        document = session.query(Document).filter(Document.id == document_id).first()
+        document = document_query(session, user).filter(Document.id == document_id).first()
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found.")
 
@@ -154,7 +294,7 @@ def get_document(document_id: str) -> dict[str, Any]:
 
 
 @app.post("/documents/upload")
-async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
+async def upload_document(file: UploadFile = File(...), user: User = Depends(get_current_user)) -> dict[str, Any]:
     if not file.filename:
         raise HTTPException(status_code=400, detail="A file is required for document processing.")
 
@@ -201,6 +341,7 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
     try:
         with SessionLocal() as session:
             document = Document(
+                owner_id=user.id,
                 filename=filename,
                 status="processed",
                 file_type=extension,
@@ -222,20 +363,20 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
             session.add(document)
             session.commit()
             record["document_id"] = document.id
-    except Exception:
-        record["document_id"] = None
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="The processed document could not be persisted.") from exc
 
     return record
 
 
 @app.post("/documents/{document_id}/review")
-def submit_review(document_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+def submit_review(document_id: str, payload: dict[str, Any], user: User = Depends(get_current_user)) -> dict[str, Any]:
     manual_corrections = payload.get("manual_corrections") or {}
     if not isinstance(manual_corrections, dict) or not manual_corrections:
         raise HTTPException(status_code=400, detail="manual_corrections must be a non-empty object.")
 
     with SessionLocal() as session:
-        document = session.query(Document).filter(Document.id == document_id).first()
+        document = document_query(session, user).filter(Document.id == document_id).first()
         if document is None:
             raise HTTPException(status_code=404, detail="Document not found.")
 
@@ -264,4 +405,15 @@ def submit_review(document_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         "extracted_values": auto_extracted,
         "corrected_values": corrected_values,
     }
+
+
+@app.delete("/documents/{document_id}")
+def delete_document(document_id: str, user: User = Depends(get_current_user)) -> dict[str, str]:
+    with SessionLocal() as session:
+        document = document_query(session, user).filter(Document.id == document_id).first()
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found.")
+        session.delete(document)
+        session.commit()
+    return {"document_id": document_id, "status": "deleted"}
 

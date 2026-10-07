@@ -1,14 +1,3 @@
-export const profileData = {
-  name: 'Aisha Patel',
-  email: 'aisha.patel@docubrix.ai',
-  phone: '+1 (415) 555-0198',
-  organization: 'DocuBrix Labs',
-  role: 'Operations Analyst',
-  location: 'London, UK',
-  bio: 'Document automation specialist focused on financial workflows and operational intelligence.',
-  avatar: 'AP',
-}
-
 export const appShellNav = [
   { label: 'Dashboard', path: '/dashboard' },
   { label: 'Document Processing', path: '/processing' },

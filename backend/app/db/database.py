@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -34,3 +34,16 @@ def check_database_connection() -> dict:
             "error": "Database server is not currently reachable.",
             "details": str(exc),
         }
+
+
+def ensure_schema() -> None:
+    if engine is None:
+        return
+
+    Base.metadata.create_all(bind=engine)
+    inspector = inspect(engine)
+    document_columns = {column["name"] for column in inspector.get_columns("documents")}
+    if "owner_id" not in document_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE documents ADD COLUMN owner_id VARCHAR"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_documents_owner_id ON documents (owner_id)"))

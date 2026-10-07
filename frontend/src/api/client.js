@@ -69,6 +69,13 @@ export async function fetchDocuments() {
   return response.data.documents || []
 }
 
+export async function searchDocuments(query, documentType) {
+  const response = await api.get('/documents/search', {
+    params: { q: query, document_type: documentType === 'all' ? undefined : documentType },
+  })
+  return response.data.documents || []
+}
+
 export async function fetchDocumentSummary() {
   const response = await api.get('/documents/summary')
   return response.data

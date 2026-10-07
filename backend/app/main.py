@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import or_
 
 from backend.app.config import ADMIN_EMAIL, APP_ENVIRONMENT, APP_NAME, APP_VERSION
 from backend.app.db.database import SessionLocal, check_database_connection, ensure_schema
-from backend.app.models.document import Document
+from backend.app.models.document import Document, DocumentChunk
 from backend.app.models.user import User
 from backend.app.services.auth import create_access_token, decode_access_token, hash_password, verify_password
 from backend.app.services.document_processor import (
@@ -21,6 +23,8 @@ from backend.app.services.document_processor import (
     get_file_extension,
     validate_extracted_fields,
 )
+from backend.app.services.classifier import classify_document_result
+from backend.app.services.knowledge import chunk_text, generate_grounded_answer, query_terms
 
 app = FastAPI(
     title=APP_NAME,
@@ -97,6 +101,12 @@ def serialize_document(document: Document) -> dict[str, Any]:
         "document_id": document.id,
         "filename": document.filename,
         "document_type": document.document_type,
+        "classification": {
+            "method": document.classification_method,
+            "model": document.classification_model,
+            "confidence": document.classification_confidence,
+            "classified_at": document.classified_at.isoformat() if document.classified_at else None,
+        },
         "status": document.status,
         "file_type": document.file_type,
         "upload_time": document.upload_time.isoformat() if document.upload_time else None,
@@ -271,6 +281,44 @@ def document_summary(user: User = Depends(get_current_user)) -> dict[str, Any]:
     }
 
 
+@app.get("/documents/search")
+def search_documents(
+    q: str = Query(min_length=1),
+    document_type: str | None = None,
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    terms = query_terms(q)
+    if not terms:
+        return {"documents": [], "count": 0}
+    with SessionLocal() as session:
+        query = document_query(session, user)
+        conditions = []
+        for term in terms:
+            pattern = f"%{term}%"
+            conditions.append(
+                or_(
+                    Document.filename.ilike(pattern),
+                    Document.raw_text.ilike(pattern),
+                    Document.document_type.ilike(pattern),
+                    Document.status.ilike(pattern),
+                )
+            )
+        query = query.filter(or_(*conditions))
+        if document_type:
+            query = query.filter(Document.document_type == document_type)
+        documents = query.order_by(Document.upload_time.desc()).all()
+    serialized = [serialize_document(document) for document in documents]
+    return {"documents": serialized, "count": len(serialized), "query": q}
+
+
+@app.get("/documents/search/semantic")
+def semantic_search_documents(q: str = Query(min_length=1), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    raise HTTPException(
+        status_code=503,
+        detail="Semantic search is unavailable until an embedding provider is configured.",
+    )
+
+
 @app.get("/documents/{document_id}")
 def get_document(document_id: str, user: User = Depends(get_current_user)) -> dict[str, Any]:
     with SessionLocal() as session:
@@ -290,6 +338,12 @@ def get_document(document_id: str, user: User = Depends(get_current_user)) -> di
         "status": document.status,
         "file_type": document.file_type,
         "upload_time": document.upload_time.isoformat() if document.upload_time else None,
+        "classification": {
+            "method": document.classification_method,
+            "model": document.classification_model,
+            "confidence": document.classification_confidence,
+            "classified_at": document.classified_at.isoformat() if document.classified_at else None,
+        },
         "extracted_fields": extracted_json.get("extracted_fields", {}),
         "validation": extracted_json.get("validation", {}),
         "confidence": document.confidence_scores,
@@ -327,7 +381,8 @@ async def upload_document(file: UploadFile = File(...), user: User = Depends(get
     if not cleaned_text:
         raise HTTPException(status_code=422, detail="No readable text was found in the document.")
 
-    document_type = classify_document(cleaned_text)
+    classification = classify_document_result(cleaned_text)
+    document_type = classification.document_type
     extracted_fields = extract_financial_fields(cleaned_text, document_type)
     validation = validate_extracted_fields(document_type, extracted_fields)
     confidence = build_confidence_report(document_type, extracted_fields, validation)
@@ -338,6 +393,7 @@ async def upload_document(file: UploadFile = File(...), user: User = Depends(get
         "status": "processed",
         "file_type": extension,
         "document_type": document_type,
+        "classification": classification.as_dict(),
         "layout_summary": layout_summary,
         "raw_text": cleaned_text,
         "extracted_fields": extracted_fields,
@@ -353,9 +409,14 @@ async def upload_document(file: UploadFile = File(...), user: User = Depends(get
                 status="processed",
                 file_type=extension,
                 document_type=document_type,
+                classification_method=classification.method,
+                classification_model=f"{classification.model_name}:{classification.model_version}" if classification.model_version and classification.model_name else classification.model_name,
+                classification_confidence=classification.confidence,
+                classified_at=datetime.fromisoformat(classification.classified_at) if classification.classified_at else None,
                 raw_text=cleaned_text,
                 extracted_json={
                     "document_type": document_type,
+                    "classification": classification.as_dict(),
                     "source": "ocr",
                     "layout_summary": layout_summary,
                     "extracted_fields": extracted_fields,
@@ -368,12 +429,65 @@ async def upload_document(file: UploadFile = File(...), user: User = Depends(get
                 },
             )
             session.add(document)
+            session.flush()
+            for index, content in enumerate(chunk_text(cleaned_text)):
+                session.add(
+                    DocumentChunk(
+                        owner_id=user.id,
+                        document_id=document.id,
+                        chunk_index=index,
+                        content=content,
+                    )
+                )
             session.commit()
             record["document_id"] = document.id
     except Exception as exc:
         raise HTTPException(status_code=500, detail="The processed document could not be persisted.") from exc
 
     return record
+
+
+@app.post("/documents/{document_id}/ask")
+def ask_document(document_id: str, payload: dict[str, Any], user: User = Depends(get_current_user)) -> dict[str, Any]:
+    question = str(payload.get("question") or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="A question is required.")
+    with SessionLocal() as session:
+        document = document_query(session, user).filter(Document.id == document_id).first()
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found.")
+        terms = query_terms(question)
+        chunks = session.query(DocumentChunk).filter(
+            DocumentChunk.document_id == document_id,
+            DocumentChunk.owner_id == user.id,
+        ).all()
+        ranked = sorted(
+            chunks,
+            key=lambda chunk: sum(term in chunk.content.lower() for term in terms),
+            reverse=True,
+        )
+        sources = [
+            {"document_id": document.id, "filename": document.filename, "chunk_index": chunk.chunk_index, "content": chunk.content}
+            for chunk in ranked[:5]
+            if not terms or any(term in chunk.content.lower() for term in terms)
+        ]
+    try:
+        answer = generate_grounded_answer(question, sources)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"answer": answer, "sources": sources}
+
+
+@app.get("/documents/{document_id}/similar")
+def similar_documents(document_id: str, user: User = Depends(get_current_user)) -> dict[str, Any]:
+    with SessionLocal() as session:
+        document = document_query(session, user).filter(Document.id == document_id).first()
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found.")
+    raise HTTPException(
+        status_code=503,
+        detail="Similar-document search is unavailable until an embedding provider is configured.",
+    )
 
 
 @app.post("/documents/{document_id}/review")

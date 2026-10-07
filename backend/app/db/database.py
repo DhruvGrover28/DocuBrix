@@ -57,6 +57,15 @@ def ensure_schema() -> None:
             connection.execute(text("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0"))
         if "owner_id" not in document_columns:
             connection.execute(text("ALTER TABLE documents ADD COLUMN owner_id VARCHAR"))
+        if "classification_method" not in document_columns:
+            connection.execute(text("ALTER TABLE documents ADD COLUMN classification_method VARCHAR NOT NULL DEFAULT 'heuristic_fallback'"))
+        if "classification_model" not in document_columns:
+            connection.execute(text("ALTER TABLE documents ADD COLUMN classification_model VARCHAR"))
+        if "classification_confidence" not in document_columns:
+            json_type = "JSONB" if engine.dialect.name == "postgresql" else "JSON"
+            connection.execute(text(f"ALTER TABLE documents ADD COLUMN classification_confidence {json_type}"))
+        if "classified_at" not in document_columns:
+            connection.execute(text("ALTER TABLE documents ADD COLUMN classified_at TIMESTAMP"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_documents_owner_id ON documents (owner_id)"))
 
         if engine.dialect.name == "postgresql":

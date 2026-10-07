@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, Text
 
 from backend.app.db.database import Base
 
@@ -18,6 +18,10 @@ class Document(Base):
     status = Column(String, default="uploaded", nullable=False)
     file_type = Column(String, nullable=False)
     document_type = Column(String, default="other_financial_document", nullable=False)
+    classification_method = Column(String, default="heuristic_fallback", nullable=False)
+    classification_model = Column(String, nullable=True)
+    classification_confidence = Column(JSON, nullable=True)
+    classified_at = Column(DateTime, nullable=True)
     raw_text = Column(Text, nullable=True)
     extracted_json = Column(JSON, nullable=True)
     confidence_scores = Column(JSON, nullable=True)
@@ -29,3 +33,15 @@ class Document(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    owner_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    document_id = Column(String, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    chunk_index = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    embedding = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

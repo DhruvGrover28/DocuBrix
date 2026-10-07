@@ -38,7 +38,7 @@ import {
 } from 'recharts'
 import { toast } from 'sonner'
 
-import { AUTH_TOKEN_KEY, fetchAdminOverview, fetchCurrentUser, fetchDocumentById, fetchDocumentSummary, fetchDocuments, fetchHealth, loginUser, logoutUser, registerUser, saveReview, updateCurrentUser, uploadDocument } from './api/client'
+import { AUTH_TOKEN_KEY, fetchAdminOverview, fetchCurrentUser, fetchDocumentById, fetchDocumentSummary, fetchDocuments, fetchHealth, loginUser, logoutUser, registerUser, saveReview, searchDocuments, updateCurrentUser, uploadDocument } from './api/client'
 import { appShellNav, defaultStats } from './data/mockData'
 import { Avatar, Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, Input, Select, SelectItem, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from './components/ui'
 import { cn, formatDate, safeFloat } from './lib/utils'
@@ -661,6 +661,7 @@ function ProcessingPage() {
 function LibraryPage() {
   const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
 
@@ -679,6 +680,21 @@ function LibraryPage() {
     load()
   }, [])
 
+  useEffect(() => {
+    if (!searchQuery.trim()) return undefined
+    const timer = setTimeout(async () => {
+      try {
+        setLoading(true)
+        setDocuments(await searchDocuments(searchQuery, typeFilter))
+      } catch (error) {
+        toast.error(error.response?.data?.detail || error.message || 'Unable to search documents.')
+      } finally {
+        setLoading(false)
+      }
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [searchQuery, typeFilter])
+
   const filteredDocuments = documents.filter((item) => {
     const typeMatch = typeFilter === 'all' || (item.document_type || 'unknown') === typeFilter
     const statusMatch = statusFilter === 'all' || (item.status || 'unknown') === statusFilter
@@ -693,6 +709,10 @@ function LibraryPage() {
       <PageHeader title="Document Library" subtitle="Search, filter, and inspect the full document corpus." />
 
       <div className="mb-6 grid gap-4 md:grid-cols-2">
+        <div className="md:col-span-2">
+          <label className="mb-1.5 block text-sm font-medium text-slate-700">Search documents</label>
+          <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search filenames, text, or document type" />
+        </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Document type</label>
           <Select value={typeFilter} onValueChange={setTypeFilter} placeholder="Filter by type">

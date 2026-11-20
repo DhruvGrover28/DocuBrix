@@ -165,13 +165,10 @@ function LandingPage({ user }) {
       <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-bold text-lg shadow-lg shadow-blue-500/20">
-              DB
-            </div>
-            <div>
-              <span className="font-bold text-lg tracking-tight text-white">DocuBrix</span>
-              <span className="ml-2 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-blue-400 border border-blue-500/20">AI Lifecycle</span>
-            </div>
+            <Link to="/" className="flex items-center gap-2">
+              <img src="/docubrix-logo.png" alt="DocuBrix" className="h-9 w-auto object-contain rounded-lg bg-white/95 px-2.5 py-1 shadow-sm" />
+            </Link>
+            <span className="rounded bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-400 border border-blue-500/20">AI Lifecycle &amp; Workflows</span>
           </div>
           <div className="flex items-center gap-3">
             {user ? (

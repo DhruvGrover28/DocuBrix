@@ -2,7 +2,7 @@ services:
   # 1. FastAPI Backend Service (Docker with Tesseract OCR & SQLite)
   - type: web
     name: docubrix-api
-    env: docker
+    runtime: docker
     plan: free
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
@@ -19,7 +19,6 @@ services:
   - type: web
     name: docubrix-frontend
     runtime: static
-    plan: free
     buildCommand: npm --prefix frontend install && npm --prefix frontend run build
     staticPublishPath: ./frontend/dist
     routes:

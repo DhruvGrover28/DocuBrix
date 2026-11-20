@@ -9,7 +9,7 @@ export const appShellNav = [
   { label: 'Profile', path: '/profile' },
   { label: 'Settings', path: '/settings' },
   { label: 'Team Management', path: '/team', comingSoon: true },
-  { label: 'Workflow Automation', path: '/automation', comingSoon: true },
+  { label: 'Workflow Automation', path: '/automation' },
   { label: 'Exports & Reports', path: '/reports', comingSoon: true },
   { label: 'Integrations', path: '/integrations', comingSoon: true },
 ]

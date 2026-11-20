@@ -12,7 +12,11 @@ engine: Engine | None = (
     create_engine(
         DATABASE_URL,
         pool_pre_ping=True,
-        connect_args={"connect_timeout": 5} if DATABASE_URL.startswith("postgresql") else {},
+        connect_args=(
+            {"connect_timeout": 5}
+            if DATABASE_URL.startswith("postgresql")
+            else ({"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {})
+        ),
     )
     if DATABASE_URL
     else None
@@ -34,7 +38,8 @@ def check_database_connection() -> dict:
             connection.execute(text("SELECT 1"))
         return {
             "status": "connected",
-            "url": DATABASE_URL.split("@")[-1].split("/")[0] if "@" in DATABASE_URL else "local",
+            "url": DATABASE_URL.split("@")[-1].split("/")[0] if "@" in DATABASE_URL else "local_sqlite",
+            "dialect": engine.dialect.name,
         }
     except Exception as exc:
         return {
@@ -48,38 +53,47 @@ def ensure_schema() -> None:
     if engine is None:
         return
 
+    # Import models so Base.metadata knows about them
+    import backend.app.models.user  # noqa: F401
+    import backend.app.models.document  # noqa: F401
+    import backend.app.models.conversation  # noqa: F401
+
     Base.metadata.create_all(bind=engine)
     inspector = inspect(engine)
-    user_columns = {column["name"] for column in inspector.get_columns("users")}
-    document_columns = {column["name"] for column in inspector.get_columns("documents")}
+    table_names = set(inspector.get_table_names())
+
     with engine.begin() as connection:
-        if "session_version" not in user_columns:
-            connection.execute(text("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0"))
-        if "owner_id" not in document_columns:
-            connection.execute(text("ALTER TABLE documents ADD COLUMN owner_id VARCHAR"))
-        if "classification_method" not in document_columns:
-            connection.execute(text("ALTER TABLE documents ADD COLUMN classification_method VARCHAR NOT NULL DEFAULT 'heuristic_fallback'"))
-        if "classification_model" not in document_columns:
-            connection.execute(text("ALTER TABLE documents ADD COLUMN classification_model VARCHAR"))
-        if "classification_confidence" not in document_columns:
-            json_type = "JSONB" if engine.dialect.name == "postgresql" else "JSON"
-            connection.execute(text(f"ALTER TABLE documents ADD COLUMN classification_confidence {json_type}"))
-        if "classified_at" not in document_columns:
-            connection.execute(text("ALTER TABLE documents ADD COLUMN classified_at TIMESTAMP"))
-        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_documents_owner_id ON documents (owner_id)"))
+        if "users" in table_names:
+            user_columns = {column["name"] for column in inspector.get_columns("users")}
+            if "session_version" not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0"))
 
-        if engine.dialect.name == "postgresql":
-            foreign_keys = {foreign_key["name"] for foreign_key in inspect(connection).get_foreign_keys("documents")}
-            if "fk_documents_owner_id" not in foreign_keys:
-                connection.execute(
-                    text(
-                        "ALTER TABLE documents "
-                        "ADD CONSTRAINT fk_documents_owner_id "
-                        "FOREIGN KEY (owner_id) REFERENCES users (id) NOT VALID"
+        if "documents" in table_names:
+            document_columns = {column["name"] for column in inspector.get_columns("documents")}
+            if "owner_id" not in document_columns:
+                connection.execute(text("ALTER TABLE documents ADD COLUMN owner_id VARCHAR"))
+            if "classification_method" not in document_columns:
+                connection.execute(text("ALTER TABLE documents ADD COLUMN classification_method VARCHAR NOT NULL DEFAULT 'heuristic_fallback'"))
+            if "classification_model" not in document_columns:
+                connection.execute(text("ALTER TABLE documents ADD COLUMN classification_model VARCHAR"))
+            if "classification_confidence" not in document_columns:
+                json_type = "JSONB" if engine.dialect.name == "postgresql" else "JSON"
+                connection.execute(text(f"ALTER TABLE documents ADD COLUMN classification_confidence {json_type}"))
+            if "classified_at" not in document_columns:
+                connection.execute(text("ALTER TABLE documents ADD COLUMN classified_at TIMESTAMP"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_documents_owner_id ON documents (owner_id)"))
+
+            if engine.dialect.name == "postgresql":
+                foreign_keys = {foreign_key["name"] for foreign_key in inspect(connection).get_foreign_keys("documents")}
+                if "fk_documents_owner_id" not in foreign_keys:
+                    connection.execute(
+                        text(
+                            "ALTER TABLE documents "
+                            "ADD CONSTRAINT fk_documents_owner_id "
+                            "FOREIGN KEY (owner_id) REFERENCES users (id) NOT VALID"
+                        )
                     )
-                )
 
-        table_names = set(inspector.get_table_names())
         if "conversations" in table_names:
             conv_columns = {col["name"] for col in inspector.get_columns("conversations")}
             if "document_id" not in conv_columns:

@@ -1,16 +1,19 @@
-FROM python:3.13-slim
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive
+# Multi-stage Dockerfile for React + Vite Frontend
+FROM node:20-alpine AS builder
 
 WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm install
 
-COPY requirements.txt ./requirements.txt
-RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
+COPY frontend ./
+RUN npm run build
 
-COPY frontend ./frontend
+FROM node:20-alpine
+WORKDIR /app
+RUN npm install -g serve
+COPY --from=builder /app/dist ./dist
 
 EXPOSE 8501
+ENV PORT=8501
 
-CMD ["sh", "-c", "streamlit run frontend/streamlit_app.py --server.address 0.0.0.0 --server.port ${PORT:-8501}"]
+CMD ["sh", "-c", "serve -s dist -l ${PORT:-8501}"]

@@ -25,13 +25,25 @@ from backend.app.services.document_processor import (
     build_confidence_report,
     classify_document,
     detect_document_type,
+    extract_domain_fields,
     extract_financial_fields,
     extract_layout_summary,
     extract_text_from_file,
     get_file_extension,
     validate_extracted_fields,
 )
-from backend.app.services.classifier import classify_document_result
+from backend.app.services.classifier import (
+    DOCUMENT_CATEGORY_MAP,
+    classify_document_result,
+)
+from backend.app.services.workflow import (
+    add_workflow_rule,
+    delete_workflow_rule,
+    evaluate_document_workflows,
+    get_workflow_logs,
+    get_workflow_rules,
+    update_workflow_rule,
+)
 from backend.app.services.knowledge import (
     chunk_text,
     cosine_similarity,
@@ -117,15 +129,18 @@ def document_query(session: Any, user: User) -> Any:
 def serialize_document(document: Document) -> dict[str, Any]:
     extracted_json = document.extracted_json or {}
     review_json = document.review_json or {}
+    category = extracted_json.get("category") or DOCUMENT_CATEGORY_MAP.get(document.document_type, "General")
     return {
         "document_id": document.id,
         "filename": document.filename,
         "document_type": document.document_type,
+        "category": category,
         "classification": {
             "method": document.classification_method,
             "model": document.classification_model,
             "confidence": document.classification_confidence,
             "classified_at": document.classified_at.isoformat() if document.classified_at else None,
+            "category": category,
         },
         "status": document.status,
         "file_type": document.file_type,
@@ -134,6 +149,7 @@ def serialize_document(document: Document) -> dict[str, Any]:
         "validation": extracted_json.get("validation", {}),
         "extracted_fields": extracted_json.get("extracted_fields", {}),
         "review_json": review_json,
+        "workflow": extracted_json.get("workflow", {}),
         "raw_text": document.raw_text,
     }
 
@@ -605,22 +621,37 @@ def upload_document(
 
     classification = classify_document_result(cleaned_text)
     document_type = classification.document_type
-    extracted_fields = extract_financial_fields(cleaned_text, document_type)
+    category = classification.category
+    extracted_fields = extract_domain_fields(cleaned_text, document_type)
     validation = validate_extracted_fields(document_type, extracted_fields)
     confidence = build_confidence_report(document_type, extracted_fields, validation)
     layout_summary = extract_layout_summary(cleaned_text)
 
+    # Workflow Automation Evaluation
+    workflow_eval = evaluate_document_workflows({
+        "filename": filename,
+        "document_type": document_type,
+        "category": category,
+        "confidence": confidence,
+        "validation": validation,
+        "extracted_fields": extracted_fields,
+        "status": "processed",
+    })
+    initial_status = workflow_eval.get("final_status", "processed")
+
     record = {
         "filename": filename,
-        "status": "processed",
+        "status": initial_status,
         "file_type": extension,
         "document_type": document_type,
+        "category": category,
         "classification": classification.as_dict(),
         "layout_summary": layout_summary,
         "raw_text": cleaned_text,
         "extracted_fields": extracted_fields,
         "validation": validation,
         "confidence": confidence,
+        "workflow": workflow_eval,
     }
 
     try:
@@ -628,7 +659,7 @@ def upload_document(
             document = Document(
                 owner_id=user.id,
                 filename=filename,
-                status="processed",
+                status=initial_status,
                 file_type=extension,
                 document_type=document_type,
                 classification_method=classification.method,
@@ -638,11 +669,13 @@ def upload_document(
                 raw_text=cleaned_text,
                 extracted_json={
                     "document_type": document_type,
+                    "category": category,
                     "classification": classification.as_dict(),
                     "source": "ocr",
                     "layout_summary": layout_summary,
                     "extracted_fields": extracted_fields,
                     "validation": validation,
+                    "workflow": workflow_eval,
                 },
                 confidence_scores=confidence,
                 review_json={
@@ -813,6 +846,136 @@ def delete_document(document_id: str, user: User = Depends(get_current_user)) ->
         session.delete(document)
         session.commit()
     return {"document_id": document_id, "status": "deleted"}
+
+
+# ============================================================================
+# Workflow Automation & Rule Engine Endpoints
+# ============================================================================
+
+
+@app.get("/workflows/rules")
+def list_workflow_rules(user: User = Depends(get_current_user)) -> dict[str, Any]:
+    return {"rules": get_workflow_rules()}
+
+
+@app.post("/workflows/rules")
+def create_workflow_rule(payload: dict[str, Any], user: User = Depends(get_current_user)) -> dict[str, Any]:
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Rule name is required.")
+    rule = add_workflow_rule(payload)
+    return {"rule": rule}
+
+
+@app.patch("/workflows/rules/{rule_id}")
+def modify_workflow_rule(rule_id: str, payload: dict[str, Any], user: User = Depends(get_current_user)) -> dict[str, Any]:
+    rule = update_workflow_rule(rule_id, payload)
+    if not rule:
+        raise HTTPException(status_code=404, detail="Workflow rule not found.")
+    return {"rule": rule}
+
+
+@app.delete("/workflows/rules/{rule_id}")
+def remove_workflow_rule(rule_id: str, user: User = Depends(get_current_user)) -> dict[str, Any]:
+    success = delete_workflow_rule(rule_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Workflow rule not found.")
+    return {"status": "deleted", "id": rule_id}
+
+
+@app.get("/workflows/logs")
+def list_workflow_logs(limit: int = Query(default=50, ge=1, le=200), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    return {"logs": get_workflow_logs(limit=limit)}
+
+
+@app.post("/workflows/evaluate/{document_id}")
+def evaluate_document_workflow(document_id: str, user: User = Depends(get_current_user)) -> dict[str, Any]:
+    with SessionLocal() as session:
+        document = document_query(session, user).filter(Document.id == document_id).first()
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found.")
+
+        extracted_json = document.extracted_json or {}
+        workflow_eval = evaluate_document_workflows({
+            "document_id": document.id,
+            "filename": document.filename,
+            "document_type": document.document_type,
+            "category": extracted_json.get("category") or DOCUMENT_CATEGORY_MAP.get(document.document_type, "General"),
+            "confidence": document.confidence_scores or {},
+            "validation": extracted_json.get("validation", {}),
+            "extracted_fields": extracted_json.get("extracted_fields", {}),
+            "status": document.status,
+        })
+
+        new_status = workflow_eval.get("final_status", document.status)
+        document.status = new_status
+        extracted_json["workflow"] = workflow_eval
+        document.extracted_json = extracted_json
+        session.commit()
+
+        return {
+            "document_id": document.id,
+            "new_status": new_status,
+            "workflow": workflow_eval,
+        }
+
+
+@app.get("/workflows/queue")
+def get_workflow_queue(user: User = Depends(get_current_user)) -> dict[str, Any]:
+    review_statuses = {"needs_review", "pending_approval", "in_compliance_review", "failed", "fallback_unmatched"}
+    with SessionLocal() as session:
+        query = document_query(session, user).filter(Document.status.in_(review_statuses))
+        documents = query.order_by(Document.upload_time.desc()).all()
+        return {
+            "queue": [serialize_document(doc) for doc in documents],
+            "count": len(documents),
+        }
+
+
+@app.post("/workflows/queue/{document_id}/action")
+def execute_queue_action(document_id: str, payload: dict[str, Any], user: User = Depends(get_current_user)) -> dict[str, Any]:
+    action = str(payload.get("action") or "").strip().lower()
+    note = str(payload.get("note") or "").strip()
+
+    valid_actions = {"approve", "reject", "flag", "reprocess"}
+    if action not in valid_actions:
+        raise HTTPException(status_code=400, detail=f"Invalid action. Expected one of: {', '.join(valid_actions)}")
+
+    with SessionLocal() as session:
+        document = document_query(session, user).filter(Document.id == document_id).first()
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found.")
+
+        status_mapping = {
+            "approve": "approved",
+            "reject": "rejected",
+            "flag": "flagged",
+            "reprocess": "processed",
+        }
+        new_status = status_mapping[action]
+        document.status = new_status
+
+        review_json = dict(document.review_json or {})
+        history = list(review_json.get("action_history", []))
+        history.append({
+            "action": action,
+            "status": new_status,
+            "performed_by": user.email,
+            "note": note,
+            "timestamp": datetime.utcnow().isoformat(),
+        })
+        review_json["action_history"] = history
+        document.review_json = review_json
+
+        session.commit()
+
+        return {
+            "document_id": document.id,
+            "status": new_status,
+            "action": action,
+            "note": note,
+            "performed_by": user.email,
+        }
 
 
 # ============================================================================

@@ -157,6 +157,138 @@ function ClassificationBadge({ classification, documentType, showType = true, cl
   )
 }
 
+function LandingPage({ user }) {
+  const navigate = useNavigate()
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white">
+      {/* Top Navbar */}
+      <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-bold text-lg shadow-lg shadow-blue-500/20">
+              DB
+            </div>
+            <div>
+              <span className="font-bold text-lg tracking-tight text-white">DocuBrix</span>
+              <span className="ml-2 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-blue-400 border border-blue-500/20">AI Lifecycle</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {user ? (
+              <Button onClick={() => navigate('/dashboard')} className="bg-blue-600 hover:bg-blue-500 text-white font-medium shadow-lg shadow-blue-600/20">
+                Go to Dashboard <ArrowRight className="ml-1.5 h-4 w-4" />
+              </Button>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={() => navigate('/login')} className="text-slate-300 hover:text-white hover:bg-slate-900 text-sm">
+                  Sign In
+                </Button>
+                <Button onClick={() => navigate('/login')} className="bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm shadow-lg shadow-blue-600/20">
+                  Launch Workspace <ArrowRight className="ml-1.5 h-4 w-4" />
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <main className="flex-1">
+        <section className="relative overflow-hidden pt-20 pb-24 px-6 max-w-7xl mx-auto text-center">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-blue-600/15 blur-[120px] rounded-full pointer-events-none" />
+          
+          <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-1.5 text-xs font-semibold text-blue-400 mb-8 backdrop-blur">
+            <Zap className="h-3.5 w-3.5 text-amber-400" />
+            <span>Autonomous Multi-Domain Document &amp; Workflow Intelligence</span>
+          </div>
+
+          <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-tight sm:leading-none mb-6">
+            Intelligent Document Lifecycle. <br className="hidden sm:inline" />
+            <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-sky-400 bg-clip-text text-transparent">
+              Powered by Workflow Automation.
+            </span>
+          </h1>
+
+          <p className="max-w-2xl mx-auto text-base sm:text-lg text-slate-400 mb-10 leading-relaxed">
+            Eliminate document silos, manual data entry, and untracked compliance risks. DocuBrix audits, classifies, and automates documents across Academic, Legal, Medical, Administrative, and Financial domains with deterministic rule gates.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-14">
+            <Button size="lg" onClick={() => navigate(user ? '/dashboard' : '/login')} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-xl font-semibold shadow-xl shadow-blue-600/25 flex items-center gap-2">
+              Launch Workspace <ArrowRight className="h-5 w-5" />
+            </Button>
+            <Button size="lg" variant="outline" onClick={() => navigate(user ? '/automation' : '/login')} className="border-slate-800 bg-slate-900/60 hover:bg-slate-800 text-slate-200 px-7 py-3 rounded-xl font-medium">
+              Explore Active Rules
+            </Button>
+          </div>
+
+          {/* Metric Sentinel Pills */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-4xl mx-auto border border-slate-800/80 bg-slate-900/40 backdrop-blur rounded-2xl p-4 text-left">
+            <div className="p-3 border-r border-slate-800/60">
+              <div className="text-2xl font-bold text-white">5 Domains</div>
+              <div className="text-xs text-slate-400">Academic, Legal, Medical, Admin, Financial</div>
+            </div>
+            <div className="p-3 border-r border-slate-800/60">
+              <div className="text-2xl font-bold text-emerald-400">100% Verified</div>
+              <div className="text-xs text-slate-400">Deterministic Confidence Scoring</div>
+            </div>
+            <div className="p-3 border-r border-slate-800/60">
+              <div className="text-2xl font-bold text-amber-400">6 Active Rules</div>
+              <div className="text-xs text-slate-400">Spend Gate, PHI Shield &amp; Audits</div>
+            </div>
+            <div className="p-3">
+              <div className="text-2xl font-bold text-purple-400">RAG Grounded</div>
+              <div className="text-xs text-slate-400">Conversational AI with Citations</div>
+            </div>
+          </div>
+        </section>
+
+        {/* Feature Grid Section */}
+        <section className="py-20 border-t border-slate-800/60 bg-slate-900/30">
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="text-center max-w-2xl mx-auto mb-16">
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">Core Platform Capabilities</h2>
+              <p className="text-sm text-slate-400">Engineered from ground up with enterprise multi-domain ingestion, OCR layout parsing, and stateful human-in-the-loop workflow governance.</p>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
+                <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mb-4">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <h3 className="font-semibold text-lg text-white mb-2">Multi-Domain Classification</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">Zero-shot and heuristic classification across 12+ document types including transcripts, legal contracts, prescriptions, and invoices.</p>
+              </div>
+
+              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
+                <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center mb-4">
+                  <Zap className="h-5 w-5" />
+                </div>
+                <h3 className="font-semibold text-lg text-white mb-2">Workflow Automation Engine</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">Configurable decision engine with spend review limits, low-confidence gates, academic verification, and HIPAA/PHI security shields.</p>
+              </div>
+
+              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
+                <div className="h-10 w-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mb-4">
+                  <Bot className="h-5 w-5" />
+                </div>
+                <h3 className="font-semibold text-lg text-white mb-2">Grounded RAG Assistant</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">Conversational intelligence grounded in deterministic document vector chunks with verbatim citations and zero hallucinations.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* Academic Footer */}
+      <footer className="border-t border-slate-800/80 py-8 px-6 text-center text-xs text-slate-500">
+        <p>DocuBrix • B.Tech Minor Project Final Evaluation • University School of Automation &amp; Robotics (USAR), GGSIPU</p>
+        <p className="mt-1 text-slate-600">Students: Pranav Bisht &amp; Dhruv Grover • Supervisor: Dr. Bhanu Prakash Joshi</p>
+      </footer>
+    </div>
+  )
+}
+
 function App() {
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
@@ -189,7 +321,7 @@ function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
+      <Route path="/" element={<LandingPage user={user} />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="login" setUser={setUser} />} />
       <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="register" setUser={setUser} />} />
       <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="forgot" setUser={setUser} />} />

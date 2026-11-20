@@ -1,11 +1,21 @@
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://docubrix-api.onrender.com'
+const isLocalHost = typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1' ||
+  window.location.hostname === '0.0.0.0' ||
+  window.location.hostname === '::1'
+)
+let rawApiUrl = import.meta.env.VITE_API_URL || (isLocalHost ? 'http://localhost:8000' : 'https://docubrix-api.onrender.com')
+if (rawApiUrl && !rawApiUrl.startsWith('http://') && !rawApiUrl.startsWith('https://')) {
+  rawApiUrl = `https://${rawApiUrl}`
+}
+export const API_URL = rawApiUrl
 export const AUTH_TOKEN_KEY = 'docubrix-access-token'
 
 export const api = axios.create({
   baseURL: API_URL,
-  timeout: 30000,
+  timeout: 90000,
 })
 
 api.interceptors.request.use((config) => {
@@ -169,5 +179,48 @@ export async function sendChatMessage(conversationId, content) {
   const response = await api.post(`/conversations/${conversationId}/messages`, {
     content,
   })
+  return response.data
+}
+
+export async function fetchWorkflowRules() {
+  const response = await api.get('/workflows/rules')
+  return response.data.rules || []
+}
+
+export async function createWorkflowRule(payload) {
+  const response = await api.post('/workflows/rules', payload)
+  return response.data.rule
+}
+
+export async function updateWorkflowRule(ruleId, payload) {
+  const response = await api.patch(`/workflows/rules/${ruleId}`, payload)
+  return response.data.rule
+}
+
+export async function deleteWorkflowRule(ruleId) {
+  const response = await api.delete(`/workflows/rules/${ruleId}`)
+  return response.data
+}
+
+export async function fetchWorkflowLogs(limit = 50) {
+  const response = await api.get('/workflows/logs', { params: { limit } })
+  return response.data.logs || []
+}
+
+export async function fetchWorkflowQueue() {
+  const response = await api.get('/workflows/queue')
+  return response.data.queue || []
+}
+
+export async function executeQueueAction(documentId, action, note = '') {
+  const response = await api.post(`/workflows/queue/${documentId}/action`, {
+    action,
+    note,
+  })
+  return response.data
+}
+
+export async function evaluateDocumentWorkflow(documentId) {
+  const response = await api.post(`/workflows/evaluate/${documentId}`)
   return response.data
 }

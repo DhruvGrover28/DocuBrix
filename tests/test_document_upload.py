@@ -111,7 +111,7 @@ def test_upload_and_background_embedding_sqlite(monkeypatch) -> None:
     upload_file = UploadFile(filename="invoice.txt", file=io.BytesIO(sample_content))
 
     result = upload_document(background_tasks=bg_tasks, file=upload_file, user=dummy_user)
-    assert result["status"] == "processed"
+    assert result["status"] in ("processed", "pending_approval")
     doc_id = result["document_id"]
 
     # Verify chunks exist with None embedding immediately after upload

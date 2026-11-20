@@ -5,9 +5,13 @@ import {
   ArrowRight,
   Bell,
   Bot,
+  Check,
+  CheckCheck,
   CheckCircle2,
   ChevronRight,
   CircleDashed,
+  Clock,
+  Download,
   Edit3,
   FileText,
   Filter,
@@ -26,11 +30,16 @@ import {
   Send,
   Settings,
   ShieldCheck,
+  Sliders,
   Sparkles,
+  ToggleLeft,
+  ToggleRight,
   Trash2,
   UploadCloud,
   User,
   X,
+  XCircle,
+  Zap,
 } from 'lucide-react'
 import {
   Bar,
@@ -50,7 +59,11 @@ import {
   AUTH_TOKEN_KEY,
   askDocument,
   createConversation,
+  createWorkflowRule,
   deleteConversation,
+  deleteWorkflowRule,
+  evaluateDocumentWorkflow,
+  executeQueueAction,
   fetchAdminOverview,
   fetchConversation,
   fetchConversations,
@@ -60,6 +73,9 @@ import {
   fetchDocuments,
   fetchHealth,
   fetchSearchStatus,
+  fetchWorkflowLogs,
+  fetchWorkflowQueue,
+  fetchWorkflowRules,
   loginUser,
   logoutUser,
   registerUser,
@@ -69,6 +85,7 @@ import {
   sendChatMessage,
   updateConversation,
   updateCurrentUser,
+  updateWorkflowRule,
   uploadDocument,
 } from './api/client'
 import { appShellNav, defaultStats } from './data/mockData'
@@ -78,55 +95,510 @@ import { cn, formatDate, safeFloat } from './lib/utils'
 const statusColors = {
   processed: 'success',
   reviewed: 'success',
+  approved: 'success',
+  verified: 'success',
+  secure_archived: 'success',
   pending: 'muted',
+  pending_approval: 'warning',
+  needs_review: 'warning',
+  in_compliance_review: 'warning',
+  flagged: 'warning',
+  rejected: 'danger',
   failed: 'danger',
   unknown: 'muted',
+}
+
+const categoryColors = {
+  Financial: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Academic: 'bg-blue-50 text-blue-700 border-blue-200',
+  Legal: 'bg-purple-50 text-purple-700 border-purple-200',
+  Medical: 'bg-rose-50 text-rose-700 border-rose-200',
+  Administrative: 'bg-amber-50 text-amber-700 border-amber-200',
+  General: 'bg-slate-50 text-slate-700 border-slate-200',
 }
 
 function ClassificationBadge({ classification, documentType, showType = true, className }) {
   const method = classification?.method || 'heuristic_fallback'
   const confidence = classification?.confidence
   const model = classification?.model
+  const category = classification?.category || 'General'
   const typeText = documentType || 'unknown'
 
-  if (method === 'ml') {
-    return (
-      <div className={cn('inline-flex items-center gap-1.5', className)}>
+  return (
+    <div className={cn('inline-flex flex-wrap items-center gap-1.5', className)}>
+      {category && category !== 'General' && (
+        <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide', categoryColors[category] || categoryColors.General)}>
+          {category}
+        </span>
+      )}
+      {method === 'ml' ? (
         <Badge
           variant="default"
           className="bg-indigo-50 text-indigo-700 border border-indigo-200 gap-1 text-[11px] font-medium"
           title={model ? `Model: ${model}` : 'Machine Learning Classifier'}
         >
           <Sparkles className="h-3 w-3 text-indigo-500" />
-          <span>{showType ? `ML: ${typeText}` : 'ML'}</span>
+          <span>{showType ? typeText.replace(/_/g, ' ') : 'ML'}</span>
           {typeof confidence === 'number' && (
             <span className="ml-0.5 rounded bg-indigo-100/80 px-1 py-0.2 text-[10px] font-semibold text-indigo-900">
               {(confidence * 100).toFixed(0)}%
             </span>
           )}
         </Badge>
-      </div>
-    )
-  }
-
-  if (method === 'heuristic_fallback') {
-    return (
-      <div className={cn('inline-flex items-center gap-1.5', className)}>
+      ) : (
         <Badge
           variant="muted"
-          className="bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-medium"
-          title="Rule-based heuristic pattern matching"
+          className="bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-medium capitalize"
+          title="Rule-based pattern matching"
         >
-          <span>{showType ? `Rule: ${typeText}` : 'Rule-based'}</span>
+          <span>{showType ? typeText.replace(/_/g, ' ') : 'Rule-based'}</span>
         </Badge>
-      </div>
-    )
+      )}
+    </div>
+  )
+}
+
+function LandingPage({ user }) {
+  const navigate = useNavigate()
+  const [activeDomain, setActiveDomain] = useState('financial')
+
+  const domainSamples = {
+    financial: {
+      name: 'Vendor Invoice #INV-2026-9810',
+      domain: 'Financial',
+      color: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+      accent: 'emerald',
+      ruleBadge: 'Requires CFO Sign-Off (> $3,000 threshold)',
+      ruleColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+      confidence: '98.2%',
+      summary: 'Commercial cloud infrastructure invoice from Apex Cloud Systems Corp. for quarterly compute and database services.',
+      fields: [
+        { label: 'Invoice No.', value: 'INV-2026-9810' },
+        { label: 'Vendor Name', value: 'Apex Cloud Systems Corp.' },
+        { label: 'Total Amount', value: '$4,250.00 USD' },
+        { label: 'Tax / VAT (10%)', value: '$425.00 USD' },
+        { label: 'Billing Period', value: 'Q3 2026' },
+        { label: 'Due Date', value: 'December 15, 2026' },
+      ],
+      aiQuestion: 'What is the total due and does this require manual approval?',
+      aiAnswer: 'The total invoice amount is $4,250.00 USD due on Dec 15, 2026. Because this exceeds the $3,000 spend threshold rule, DocuBrix has routed it to the Review Queue for CFO sign-off [Page 1, Line 18].',
+    },
+    academic: {
+      name: 'Official Academic Transcript — USAR',
+      domain: 'Academic',
+      color: 'border-blue-500/30 bg-blue-500/10 text-blue-400',
+      accent: 'blue',
+      ruleBadge: 'Auto-Verified (University Registrar Seal Validated)',
+      ruleColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+      confidence: '99.1%',
+      summary: 'Undergraduate academic grade card from Guru Gobind Singh Indraprastha University (USAR East Delhi Campus).',
+      fields: [
+        { label: 'Student Name', value: 'Pranav Bisht' },
+        { label: 'Enrollment No.', value: '02719051723' },
+        { label: 'Programme', value: 'B.Tech. IIOT (Semester VII)' },
+        { label: 'Cumulative CGPA', value: '8.92 / 10.0' },
+        { label: 'Institution', value: 'USAR, GGSIPU' },
+        { label: 'Registrar Seal', value: 'Cryptographically Verified' },
+      ],
+      aiQuestion: 'What is the student\'s CGPA and enrollment status?',
+      aiAnswer: 'Student Pranav Bisht (Enrollment 02719051723) has a cumulative CGPA of 8.92/10.0 in B.Tech IIOT Semester VII. The official seal was validated with 99.1% confidence [Page 1, Table 2].',
+    },
+    medical: {
+      name: 'Specialist Clinical Prescription & Lab Rx',
+      domain: 'Medical',
+      color: 'border-purple-500/30 bg-purple-500/10 text-purple-400',
+      accent: 'purple',
+      ruleBadge: 'Active PHI Shield (Patient Identifiers Redacted)',
+      ruleColor: 'text-purple-400 bg-purple-500/10 border-purple-500/30',
+      confidence: '97.8%',
+      summary: 'Outpatient clinical diagnosis, vitals, and prescribed pharmaceutical regimen from Metro Specialty Clinic.',
+      fields: [
+        { label: 'Prescribing Physician', value: 'Dr. A. K. Sharma, MD' },
+        { label: 'Medical License', value: 'DMC-REG-2018-9941' },
+        { label: 'Prescription Code', value: 'RX-2026-7741' },
+        { label: 'Medication', value: 'Amoxicillin 500mg (TID x 7d)' },
+        { label: 'Patient Identity', value: '[REDACTED - HIPAA Guard]' },
+        { label: 'Storage Mode', value: 'Encrypted Security Vault' },
+      ],
+      aiQuestion: 'What medication is prescribed and are patient details safe?',
+      aiAnswer: 'Prescription RX-2026-7741 authorizes Amoxicillin 500mg, 1 tablet TID for 7 days. All patient PII has been automatically redacted and stored under HIPAA vault rules [Page 1, Box B].',
+    },
+    legal: {
+      name: 'Mutual Non-Disclosure Agreement (NDA)',
+      domain: 'Legal',
+      color: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
+      accent: 'amber',
+      ruleBadge: 'Flagged: Pending Legal Counsel Counter-Signature',
+      ruleColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+      confidence: '96.5%',
+      summary: 'Bilateral confidentiality and intellectual property agreement governing proprietary software disclosures.',
+      fields: [
+        { label: 'Document Type', value: 'Bilateral Mutual NDA' },
+        { label: 'Disclosing Party', value: 'DocuBrix Technologies Ltd.' },
+        { label: 'Receiving Party', value: 'Enterprise Partner LLC' },
+        { label: 'Confidentiality Term', value: '36 Months from Execution' },
+        { label: 'Governing Law', value: 'High Court of Delhi, New Delhi' },
+        { label: 'Signature Audit', value: 'Party 1 Signed, Party 2 Pending' },
+      ],
+      aiQuestion: 'What is the confidentiality term and governing law?',
+      aiAnswer: 'The NDA defines a 3-year (36 months) non-disclosure obligation under the jurisdiction of the High Court of Delhi. Counter-signature by Receiving Party is pending review [Page 3, Section 8].',
+    },
+    administrative: {
+      name: 'Executive Office Circular #2026/CIR-108',
+      domain: 'Administrative',
+      color: 'border-sky-500/30 bg-sky-500/10 text-sky-400',
+      accent: 'sky',
+      ruleBadge: 'Auto-Indexed to Knowledge Base & Broadcast',
+      ruleColor: 'text-sky-400 bg-sky-500/10 border-sky-500/30',
+      confidence: '98.7%',
+      summary: 'Institutional memorandum regarding Minor Project B.Tech evaluation timelines, rubrics, and formatting.',
+      fields: [
+        { label: 'Circular Ref', value: 'USAR/2026/CIR-108' },
+        { label: 'Issuing Authority', value: 'Office of the Dean, USAR' },
+        { label: 'Target Audience', value: 'Faculty, Evaluators & Students' },
+        { label: 'Subject Matter', value: 'ARP 455 Evaluation Protocol' },
+        { label: 'Effective Date', value: 'Immediate Effect (Nov 2026)' },
+        { label: 'Distribution', value: 'Campus Intranet Broadcast' },
+      ],
+      aiQuestion: 'Who issued this circular and what are the main deadlines?',
+      aiAnswer: 'Circular USAR/2026/CIR-108 was issued by the Dean Office, USAR, mandating evaluation standards and minimum 30-page spiral-bound report submissions for ARP 455 [Page 1, Item 4].',
+    },
   }
 
+  const curSample = domainSamples[activeDomain]
+
   return (
-    <Badge variant="muted" className={cn('text-[11px] font-medium', className)}>
-      {showType ? typeText : 'Unknown'}
-    </Badge>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white">
+      {/* Top Navbar */}
+      <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link to="/" className="flex items-center gap-2">
+              <img src="/docubrix-logo.png" alt="DocuBrix" className="h-9 w-auto object-contain rounded-lg bg-white/95 px-2.5 py-1 shadow-sm" />
+            </Link>
+            <span className="rounded bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-400 border border-blue-500/20">
+              AI Lifecycle &amp; Workflows
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            {user ? (
+              <Button onClick={() => navigate('/dashboard')} className="bg-blue-600 hover:bg-blue-500 text-white font-medium shadow-lg shadow-blue-600/20">
+                Go to Dashboard <ArrowRight className="ml-1.5 h-4 w-4" />
+              </Button>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={() => navigate('/login')} className="text-slate-300 hover:text-white hover:bg-slate-900 text-sm">
+                  Sign In
+                </Button>
+                <Button onClick={() => navigate('/login')} className="bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm shadow-lg shadow-blue-600/20">
+                  Launch Workspace <ArrowRight className="ml-1.5 h-4 w-4" />
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1">
+        {/* 1. Hero Section */}
+        <section className="relative overflow-hidden pt-20 pb-20 px-6 max-w-7xl mx-auto text-center">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[320px] bg-blue-600/15 blur-[130px] rounded-full pointer-events-none" />
+          
+          <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-1.5 text-xs font-semibold text-blue-400 mb-6 backdrop-blur">
+            <Sparkles className="h-3.5 w-3.5 text-blue-300" />
+            <span>Effortless Multi-Domain Document Understanding &amp; Governance</span>
+          </div>
+
+          <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-tight sm:leading-none mb-6">
+            Intelligent Document Automation. <br className="hidden sm:inline" />
+            <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-sky-400 bg-clip-text text-transparent">
+              Made Effortless for Everyone.
+            </span>
+          </h1>
+
+          <p className="max-w-2xl mx-auto text-base sm:text-lg text-slate-300 mb-10 leading-relaxed font-normal">
+            Stop drowning in invoices, transcripts, medical slips, and contracts. DocuBrix reads messy documents, extracts key fields with 98%+ precision, triggers automated compliance checks, and lets you ask questions with zero hallucinations.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-14">
+            <Button size="lg" onClick={() => navigate(user ? '/dashboard' : '/login')} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3.5 rounded-xl font-semibold shadow-xl shadow-blue-600/25 flex items-center gap-2 text-base">
+              Launch Workspace Free <ArrowRight className="h-5 w-5" />
+            </Button>
+            <Button size="lg" variant="outline" onClick={() => {
+              const el = document.getElementById('interactive-demo')
+              if (el) el.scrollIntoView({ behavior: 'smooth' })
+            }} className="border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-slate-200 px-7 py-3.5 rounded-xl font-medium text-base">
+              See Live Interactive Demo
+            </Button>
+          </div>
+
+          {/* User Value Metric Sentinel Badges */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-4xl mx-auto border border-slate-800/80 bg-slate-900/40 backdrop-blur rounded-2xl p-4 text-left">
+            <div className="p-3 border-r border-slate-800/60">
+              <div className="text-2xl font-bold text-white">5 Domains</div>
+              <div className="text-xs text-slate-400">Financial, Academic, Medical, Legal, Admin</div>
+            </div>
+            <div className="p-3 border-r border-slate-800/60">
+              <div className="text-2xl font-bold text-emerald-400">98.6% Accuracy</div>
+              <div className="text-xs text-slate-400">Multi-Signal Confidence Scoring</div>
+            </div>
+            <div className="p-3 border-r border-slate-800/60">
+              <div className="text-2xl font-bold text-amber-400">Automated Gates</div>
+              <div className="text-xs text-slate-400">Spend Limits, PHI Vault &amp; Approvals</div>
+            </div>
+            <div className="p-3">
+              <div className="text-2xl font-bold text-purple-400">Grounded RAG</div>
+              <div className="text-xs text-slate-400">Exact Page &amp; Line Citations</div>
+            </div>
+          </div>
+        </section>
+
+        {/* 2. Interactive Product Feature Showcase (HomePilot Style) */}
+        <section id="interactive-demo" className="py-16 border-t border-slate-800/60 bg-slate-900/20">
+          <div className="max-w-6xl mx-auto px-6">
+            <div className="text-center max-w-2xl mx-auto mb-10">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-semibold mb-3 border border-blue-500/20">
+                <FileText className="h-3.5 w-3.5" />
+                <span>Interactive Live Demo</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">See How DocuBrix Understands Any Document</h2>
+              <p className="text-sm text-slate-400">Select any document type below to see how DocuBrix extracts structured data, runs rule checks, and answers questions in real-time.</p>
+            </div>
+
+            {/* Domain Selector Chips */}
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
+              {[
+                { id: 'financial', label: 'Financial (Invoices)', icon: '🧾' },
+                { id: 'academic', label: 'Academic (Transcripts)', icon: '🎓' },
+                { id: 'medical', label: 'Medical (Prescriptions)', icon: '🩺' },
+                { id: 'legal', label: 'Legal (NDAs / Contracts)', icon: '⚖️' },
+                { id: 'administrative', label: 'Administrative (Notices)', icon: '🏛️' },
+              ].map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => setActiveDomain(d.id)}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 ${
+                    activeDomain === d.id
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25 border border-blue-500'
+                      : 'bg-slate-900/70 text-slate-400 border border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  <span>{d.icon}</span>
+                  <span>{d.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Interactive Document Preview Card */}
+            <div className="border border-slate-800 bg-slate-900/60 backdrop-blur rounded-2xl p-6 sm:p-8 shadow-2xl">
+              <div className="flex flex-col md:flex-row items-start justify-between gap-4 pb-6 border-b border-slate-800">
+                <div>
+                  <div className="flex items-center gap-3 mb-1.5">
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${curSample.color}`}>
+                      {curSample.domain}
+                    </span>
+                    <span className="text-xs text-slate-400">Confidence: <strong className="text-emerald-400">{curSample.confidence}</strong></span>
+                  </div>
+                  <h3 className="text-xl font-bold text-white">{curSample.name}</h3>
+                  <p className="text-xs text-slate-400 mt-1 max-w-xl">{curSample.summary}</p>
+                </div>
+                <div className={`px-3.5 py-2 rounded-xl text-xs font-semibold border flex items-center gap-2 ${curSample.ruleColor}`}>
+                  <Zap className="h-4 w-4 shrink-0" />
+                  <span>{curSample.ruleBadge}</span>
+                </div>
+              </div>
+
+              {/* Parsed Fields Grid */}
+              <div className="mt-6">
+                <div className="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-3 flex items-center gap-2">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-400" />
+                  <span>Extracted Structured Key-Value Entities</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {curSample.fields.map((f, i) => (
+                    <div key={i} className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3">
+                      <div className="text-[11px] text-slate-400 font-medium">{f.label}</div>
+                      <div className="text-sm font-semibold text-slate-100 mt-0.5 truncate">{f.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Conversational Grounded AI Dialogue Preview */}
+              <div className="mt-6 pt-6 border-t border-slate-800/80">
+                <div className="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-3 flex items-center gap-2">
+                  <Bot className="h-3.5 w-3.5 text-purple-400" />
+                  <span>Grounded AI Assistant Q&amp;A (Zero Hallucination with Citations)</span>
+                </div>
+                <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-4 space-y-3">
+                  <div className="flex items-start gap-2.5 text-xs">
+                    <span className="font-bold text-slate-400 shrink-0">User:</span>
+                    <span className="text-slate-300 italic">&ldquo;{curSample.aiQuestion}&rdquo;</span>
+                  </div>
+                  <div className="flex items-start gap-2.5 text-xs bg-purple-950/20 border border-purple-500/20 rounded-lg p-3">
+                    <span className="font-bold text-purple-400 shrink-0">DocuBrix:</span>
+                    <span className="text-slate-200">{curSample.aiAnswer}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 3. "How It Works" 3-Step Visual Process */}
+        <section className="py-20 border-t border-slate-800/60 bg-slate-950">
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="text-center max-w-2xl mx-auto mb-16">
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">How DocuBrix Works for You</h2>
+              <p className="text-sm text-slate-400">From raw messy file to fully verified actions in three automated steps.</p>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-8 relative">
+              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 relative">
+                <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold text-base mb-4 border border-blue-500/20">
+                  1
+                </div>
+                <h3 className="font-semibold text-lg text-white mb-2">Drop Any File</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Upload invoices, student transcripts, medical slips, or contracts in PDF, PNG, or JPG formats. DocuBrix cleans up noise and runs optical character recognition automatically.
+                </p>
+              </div>
+
+              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 relative">
+                <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold text-base mb-4 border border-amber-500/20">
+                  2
+                </div>
+                <h3 className="font-semibold text-lg text-white mb-2">Instant Understanding &amp; Rules</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Multi-signal heuristics classify your document, extract entities, compute confidence scores, and evaluate active workflow rules like spend limits and HIPAA privacy safeguards.
+                </p>
+              </div>
+
+              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 relative">
+                <div className="h-10 w-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center font-bold text-base mb-4 border border-purple-500/20">
+                  3
+                </div>
+                <h3 className="font-semibold text-lg text-white mb-2">Review, Export &amp; Chat</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Approve flagged files in the Review Queue, export clean CSV audit trails for compliance auditors, or query your document corpus with our citation-grounded AI assistant.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 4. Core User Benefits Grid */}
+        <section className="py-20 border-t border-slate-800/60 bg-slate-900/30">
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="text-center max-w-2xl mx-auto mb-16">
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">Core User Capabilities</h2>
+              <p className="text-sm text-slate-400">Everything modern businesses, educational institutes, and healthcare organizations need in one clean workspace.</p>
+            </div>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
+                <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mb-4">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <h3 className="font-semibold text-base text-white mb-2">Zero-Manual Data Entry</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">Instantly parses complex tables, totals, invoice IDs, and signatures with multi-signal confidence metrics.</p>
+              </div>
+
+              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
+                <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center mb-4">
+                  <Zap className="h-5 w-5" />
+                </div>
+                <h3 className="font-semibold text-base text-white mb-2">Automated Policy Rules</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">Set custom rules: flag high-value spend, enforce low-confidence human review, and protect confidential records.</p>
+              </div>
+
+              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
+                <div className="h-10 w-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mb-4">
+                  <Bot className="h-5 w-5" />
+                </div>
+                <h3 className="font-semibold text-base text-white mb-2">Grounded AI Chat</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">Interrogate your document repository in plain English. Every response includes page and paragraph evidence citations.</p>
+              </div>
+
+              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
+                <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-4">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <h3 className="font-semibold text-base text-white mb-2">Audit-Ready Trail (CSV)</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">Track every review decision, timestamp, and status change. Export full CSV audit logs in a single click.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 5. Enterprise Architecture & Tech Stack (Placed below features, as Dhruv recommended) */}
+        <section className="py-20 border-t border-slate-800/60 bg-slate-950">
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="text-center max-w-2xl mx-auto mb-16">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-semibold mb-3 border border-slate-700">
+                <Sliders className="h-3.5 w-3.5 text-blue-400" />
+                <span>Under the Hood</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">Enterprise-Grade Technical Architecture</h2>
+              <p className="text-sm text-slate-400">Engineered with modern decoupled services, sub-second latency, cryptographic user tenancy, and scalable cloud hosting.</p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-left">
+              <div className="p-5 rounded-xl border border-slate-800 bg-slate-900/40">
+                <div className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-1">Frontend Layer</div>
+                <div className="font-semibold text-white text-sm mb-1">React 18 + Tailwind CSS</div>
+                <p className="text-xs text-slate-400">Vite-powered SPA, Lucide UI icons, responsive multi-view workspace with live telemetry charts.</p>
+              </div>
+              <div className="p-5 rounded-xl border border-slate-800 bg-slate-900/40">
+                <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">API &amp; Backend</div>
+                <div className="font-semibold text-white text-sm mb-1">FastAPI + Python 3.11</div>
+                <p className="text-xs text-slate-400">Asynchronous REST endpoints, SQLAlchemy ORM, deterministic rule engine, and Pytest coverage (90/90 tests).</p>
+              </div>
+              <div className="p-5 rounded-xl border border-slate-800 bg-slate-900/40">
+                <div className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-1">AI &amp; Vector Index</div>
+                <div className="font-semibold text-white text-sm mb-1">ChromaDB + Gemini 2.5</div>
+                <p className="text-xs text-slate-400">Dense sentence embeddings, chunk-level vector search with fail-safe fallback and verbatim citations.</p>
+              </div>
+              <div className="p-5 rounded-xl border border-slate-800 bg-slate-900/40">
+                <div className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-1">Cloud Infrastructure</div>
+                <div className="font-semibold text-white text-sm mb-1">Render PaaS Cloud Deploy</div>
+                <p className="text-xs text-slate-400">Automated Git deployment pipelines, PBKDF2-HMAC password encryption, and multi-tenant isolation.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 6. CTA Banner */}
+        <section className="py-16 border-t border-slate-800/60 bg-gradient-to-b from-slate-950 to-blue-950/30 text-center px-6">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">Ready to Automate Your Document Workflow?</h2>
+            <p className="text-slate-300 text-sm sm:text-base mb-8 max-w-xl mx-auto">Experience the full power of autonomous document classification, spend safeguard rules, and citation-grounded AI.</p>
+            <Button size="lg" onClick={() => navigate(user ? '/dashboard' : '/login')} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3.5 rounded-xl font-semibold shadow-xl shadow-blue-600/30 text-base">
+              Launch Workspace Now <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+          </div>
+        </section>
+      </main>
+
+      {/* 7. Product Footer */}
+      <footer className="border-t border-slate-800/80 py-8 px-6 text-xs text-slate-500 bg-slate-950">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <img src="/docubrix-logo.png" alt="DocuBrix" className="h-6 w-auto object-contain rounded bg-white/95 px-1.5 py-0.5" />
+            <span className="font-semibold text-slate-300">DocuBrix</span>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-400">B.Tech. Minor Project (ARP 455) &mdash; USAR, GGSIPU</span>
+          </div>
+          <div className="flex items-center gap-4 text-slate-400">
+            <span>Student: <strong>Pranav Bisht</strong> (02719051723)</span>
+            <span>&bull;</span>
+            <span>Supervisor: <strong>Dr. Bhanu Prakash Joshi</strong></span>
+          </div>
+          <p className="text-slate-500">&copy; 2026 DocuBrix. All rights reserved.</p>
+        </div>
+      </footer>
+    </div>
   )
 }
 
@@ -162,7 +634,7 @@ function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
+      <Route path="/" element={<LandingPage user={user} />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="login" setUser={setUser} />} />
       <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="register" setUser={setUser} />} />
       <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="forgot" setUser={setUser} />} />
@@ -185,7 +657,7 @@ function App() {
                 <Route path="/profile" element={<ProfilePage user={user} onUserUpdated={setUser} />} />
                 <Route path="/settings" element={<SettingsPage user={user} />} />
                 <Route path="/team" element={<ComingSoonPage title="Team management" />} />
-                <Route path="/automation" element={<ComingSoonPage title="Workflow automation" />} />
+                <Route path="/automation" element={<WorkflowAutomationPage />} />
                 <Route path="/reports" element={<ComingSoonPage title="Exports & reports" />} />
                 <Route path="/integrations" element={<ComingSoonPage title="Integrations" />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
@@ -229,7 +701,7 @@ function ProtectedLayout({ user, children, mobileOpen, setMobileOpen, onLogout }
               >
                 <span className="flex items-center gap-2">
                   <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white text-slate-500 shadow-sm">
-                    {item.path === '/dashboard' ? <LayoutDashboard className="h-3.5 w-3.5" /> : item.path === '/chat' ? <Bot className="h-3.5 w-3.5 text-blue-600" /> : item.comingSoon ? <Sparkles className="h-3.5 w-3.5" /> : <FolderOpen className="h-3.5 w-3.5" />}
+                    {item.path === '/dashboard' ? <LayoutDashboard className="h-3.5 w-3.5" /> : item.path === '/chat' ? <Bot className="h-3.5 w-3.5 text-blue-600" /> : item.path === '/automation' ? <Zap className="h-3.5 w-3.5 text-amber-500" /> : item.comingSoon ? <Sparkles className="h-3.5 w-3.5" /> : <FolderOpen className="h-3.5 w-3.5" />}
                   </span>
                   {item.label}
                 </span>
@@ -561,6 +1033,109 @@ function DashboardPage() {
   )
 }
 
+const DEMO_PRESETS = [
+  {
+    id: 'financial',
+    label: 'Sample Invoice ($4,250)',
+    icon: '📄',
+    badge: 'Financial',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    filename: 'Sample_Invoice_INV2026.txt',
+    text: `TAX INVOICE
+TechCorp Solutions Inc.
+100 Enterprise Way, Suite 400, San Francisco, CA
+Invoice No: INV-2026-9041
+Invoice Date: 2026-11-18
+Due Date: 2026-12-18
+Bill To: Global Logistics Enterprise
+
+Description: Cloud Infrastructure & AI Pipeline Hosting Services
+Amount: $4,250.00
+Tax Due: $340.00
+Total Due: $4,590.00
+Payment Terms: Net 30
+Vendor Contact: accounts@techcorp-solutions.com
+GSTIN: 07AAAAA0000A1Z5`,
+  },
+  {
+    id: 'academic',
+    label: 'Academic Transcript (USAR)',
+    icon: '🎓',
+    badge: 'Academic',
+    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+    filename: 'Sample_Academic_Transcript_USAR.txt',
+    text: `GURU GOBIND SINGH INDRAPRASTHA UNIVERSITY
+UNIVERSITY SCHOOL OF AUTOMATION & ROBOTICS (USAR)
+East Delhi Campus, Surajmal Vihar, Delhi - 110092
+ACADEMIC TRANSCRIPT / GRADE REPORT
+
+Candidate Name: Pranav Bisht
+Enrollment No: 03119011922
+University: Guru Gobind Singh Indraprastha University (USAR)
+Course: Bachelor of Technology (B.Tech) - Artificial Intelligence & Data Science
+Semester: 7th Semester (Academic Year 2026)
+
+Course Code | Course Title | Credits | Grade
+AIDS-401   | Deep Learning & Neural Architectures | 4 | A+
+AIDS-403   | Natural Language Processing & LLMs   | 4 | O
+AIDS-405   | Cloud Computing & Microservices      | 3 | A+
+AIDS-407   | Document AI & Workflow Automation    | 4 | O
+AIDS-451   | Minor Project Evaluation I           | 4 | O
+
+Semester SGPA: 9.20
+Cumulative CGPA: 8.85
+Result: Passed with Distinction`,
+  },
+  {
+    id: 'medical',
+    label: 'Medical Prescription (Apollo)',
+    icon: '🏥',
+    badge: 'Medical',
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+    filename: 'Sample_Prescription_Apollo.txt',
+    text: `APOLLO HOSPITALS ENTERPRISE LTD.
+Department of Cardiology & Internal Medicine
+PRESCRIPTION & CLINICAL SUMMARY
+
+Date: 2026-11-15
+Patient Name: Rajesh Sharma
+Age: 52 | Gender: Male
+Patient ID: MED-2026-77821
+Doctor: Dr. Arvind Mehra, MD (Cardiology)
+
+Diagnosis: Primary Hypertension & Mild Dyslipidemia
+Vitals: BP: 142/90 mmHg | Pulse: 78 bpm | SpO2: 98%
+
+Rx (Prescription):
+1. Tab. Telmisartan 40mg - 1 tab once daily in morning (30 days)
+2. Tab. Atorvastatin 10mg - 1 tab once daily at bedtime (30 days)
+
+Special Instructions: Low sodium diet, 30 min daily walking.
+CONFIDENTIAL MEDICAL RECORD - PROTECTED HEALTH INFORMATION (PHI)`,
+  },
+  {
+    id: 'legal',
+    label: 'Mutual NDA Agreement',
+    icon: '⚖️',
+    badge: 'Legal',
+    badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
+    filename: 'Sample_Mutual_NDA_Legal.txt',
+    text: `MUTUAL NON-DISCLOSURE AND CONFIDENTIALITY AGREEMENT
+
+This Mutual Non-Disclosure Agreement is entered into on 2026-11-10, by and between:
+Party A: DocuBrix Technologies Pvt. Ltd., New Delhi, India; and
+Party B: Horizon Ventures Inc., San Francisco, CA, USA.
+
+1. Purpose: Strategic evaluation of document intelligence and workflow automation systems.
+2. Confidential Information: Technical designs, algorithms, architectures, and proprietary models.
+3. Term: The non-disclosure obligations shall survive for three (3) years from the Effective Date.
+4. Governing Law: This Agreement shall be construed in accordance with Delaware law.
+
+Signed for Party A: Pranav Bisht, Lead Engineer
+Signed for Party B: Marcus Vance, Managing Partner`,
+  },
+]
+
 function ProcessingPage() {
   const [selectedFile, setSelectedFile] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -568,23 +1143,38 @@ function ProcessingPage() {
   const [manualFields, setManualFields] = useState({})
   const [reviewSaving, setReviewSaving] = useState(false)
 
-  const handleUpload = async () => {
-    if (!selectedFile) {
-      toast.error('Please select a file to upload.')
-      return
-    }
-
+  const processFile = async (file) => {
+    if (!file) return
     try {
       setUploading(true)
-      const response = await uploadDocument(selectedFile)
+      const response = await uploadDocument(file)
       setDocumentResult(response)
       const fields = response.extracted_fields || {}
       setManualFields(Object.fromEntries(Object.entries(fields).filter(([key]) => key !== 'document_type')))
-      toast.success('Document processed successfully.')
+      toast.success(`Successfully analyzed ${file.name}`)
     } catch (error) {
-      toast.error(error.response?.data?.detail || error.message || 'Upload failed.')
+      toast.error(error.response?.data?.detail || error.message || 'Processing failed.')
     } finally {
       setUploading(false)
+    }
+  }
+
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      toast.error('Please select a file or choose a demo preset.')
+      return
+    }
+    await processFile(selectedFile)
+  }
+
+  const handleSelectPreset = async (preset, autoProcess = true) => {
+    const file = new File([preset.text], preset.filename, { type: 'text/plain' })
+    setSelectedFile(file)
+    if (autoProcess) {
+      toast.info(`Processing ${preset.label}...`)
+      await processFile(file)
+    } else {
+      toast.info(`Selected ${preset.label}. Click "Process document" to run.`)
     }
   }
 
@@ -608,7 +1198,50 @@ function ProcessingPage() {
 
   return (
     <>
-      <PageHeader title="Document Processing" subtitle="Upload a PDF or image and review the extracted data before final approval." />
+      <PageHeader
+        title="Intelligent Document Processing"
+        subtitle="Upload or test documents across Financial, Academic, Medical, Legal, or Administrative domains with automated OCR, ML classification, field extraction, and workflow validation."
+      />
+
+      {/* 1-Click Demo Presets */}
+      <Card className="mb-6 border-slate-200 shadow-sm bg-gradient-to-r from-slate-50 via-white to-blue-50/30">
+        <CardContent className="p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                Live Viva / Demo Presets
+              </span>
+              <h3 className="text-sm font-semibold text-slate-800 mt-1">1-Click Multi-Domain Test Documents</h3>
+            </div>
+            <span className="text-xs text-slate-500">Click any preset to test end-to-end OCR and workflow triggers</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {DEMO_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => handleSelectPreset(preset, true)}
+                disabled={uploading}
+                className="flex flex-col items-start p-3 rounded-xl border border-slate-200/90 bg-white hover:border-blue-400 hover:shadow-md transition-all text-left group disabled:opacity-60"
+              >
+                <div className="flex items-center justify-between w-full mb-1.5">
+                  <span className="text-xl">{preset.icon}</span>
+                  <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border', preset.badgeClass)}>
+                    {preset.badge}
+                  </span>
+                </div>
+                <div className="text-xs font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
+                  {preset.label}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5 font-mono truncate w-full">
+                  {preset.filename}
+                </div>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-6">
@@ -619,25 +1252,25 @@ function ProcessingPage() {
                   <UploadCloud className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="font-medium text-slate-900">Upload financial document</div>
-                  <div className="text-sm text-slate-500">PDF, PNG, JPG, JPEG</div>
+                  <div className="font-medium text-slate-900">Upload document for intelligent analysis</div>
+                  <div className="text-sm text-slate-500">PDF, PNG, JPG, JPEG, TXT (Up to 25MB)</div>
                 </div>
               </div>
               <input
                 type="file"
                 className="mt-4 block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
-                accept=".pdf,.png,.jpg,.jpeg"
+                accept=".pdf,.png,.jpg,.jpeg,.txt"
                 onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
               />
             </div>
             <Button onClick={handleUpload} disabled={!selectedFile || uploading}>
-              {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : 'Process document'}
+              {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Analyzing Document...</> : 'Process document'}
             </Button>
           </div>
 
           {selectedFile && (
             <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              <span>{selectedFile.name}</span>
+              <span className="font-medium">{selectedFile.name}</span>
               <span>{Math.round((selectedFile.size || 0) / 1024)} KB</span>
             </div>
           )}
@@ -1863,49 +2496,115 @@ function ReviewQueuePage() {
   const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const data = await fetchDocuments()
-        setDocuments(data.filter((item) => item.validation?.is_valid === false || !!(item.review_json && item.review_json.manual_corrections)))
-      } catch (error) {
-        toast.error(error.message || 'Unable to load review queue.')
-      } finally {
-        setLoading(false)
-      }
+  const load = async () => {
+    try {
+      const data = await fetchDocuments()
+      setDocuments(
+        data.filter(
+          (item) =>
+            item.status === 'needs_review' ||
+            item.status === 'pending_approval' ||
+            item.status === 'in_compliance_review' ||
+            item.status === 'flagged' ||
+            item.validation?.is_valid === false ||
+            !!(item.review_json && item.review_json.manual_corrections)
+        )
+      )
+    } catch (error) {
+      toast.error(error.message || 'Unable to load review queue.')
+    } finally {
+      setLoading(false)
     }
+  }
 
+  useEffect(() => {
     load()
   }, [])
 
+  const handleAction = async (docId, action) => {
+    try {
+      await executeQueueAction(docId, action, `Action ${action} executed by reviewer`)
+      toast.success(`Document updated to ${action}d.`)
+      load()
+    } catch (err) {
+      toast.error(err.message || 'Failed to update document status.')
+    }
+  }
+
   return (
     <>
-      <PageHeader title="Review Queue" subtitle="Items flagged for human review are surfaced here for approval or correction." />
+      <PageHeader
+        title="Review & Approval Queue"
+        subtitle="Documents flagged by workflow rules or quality checks requiring manual inspection and decision."
+      />
       <Card>
         <CardContent className="overflow-x-auto p-0">
           {loading ? (
             <div className="p-6 text-sm text-slate-500">Loading review queue...</div>
           ) : documents.length === 0 ? (
-            <div className="p-6 text-sm text-slate-500">No documents currently require review.</div>
+            <div className="flex flex-col items-center justify-center p-12 text-center text-slate-500">
+              <CheckCircle2 className="mb-2 h-10 w-10 text-emerald-500" />
+              <div className="text-base font-medium text-slate-800">Review queue is empty</div>
+              <div className="text-xs text-slate-500">All documents have been processed and approved.</div>
+            </div>
           ) : (
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-slate-600">
                 <tr>
-                  <th className="px-4 py-3">Filename</th>
-                  <th className="px-4 py-3">Reason</th>
+                  <th className="px-4 py-3">Document</th>
+                  <th className="px-4 py-3">Category</th>
+                  <th className="px-4 py-3">Reason / Alerts</th>
                   <th className="px-4 py-3">Confidence</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Decision Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {documents.map((item) => (
-                  <tr key={item.document_id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-900"><Link className="text-blue-700 hover:underline" to={`/documents/${item.document_id}`}>{item.filename}</Link></td>
-                    <td className="px-4 py-3">{item.validation?.is_valid === false ? 'Validation failed' : 'Manual corrections recorded'}</td>
-                    <td className="px-4 py-3">{safeFloat((item.confidence || {}).overall)?.toFixed(2) || 'N/A'}</td>
-                    <td className="px-4 py-3"><Badge variant={statusColors[item.status] || 'warning'}>{item.status || 'review'}</Badge></td>
-                  </tr>
-                ))}
+                {documents.map((item) => {
+                  const cat = item.category || (item.extracted_fields || {}).category || 'General'
+                  const alerts = (item.workflow || {}).alerts || []
+                  return (
+                    <tr key={item.document_id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-medium text-slate-900">
+                        <Link className="text-blue-700 hover:underline" to={`/documents/${item.document_id}`}>
+                          {item.filename}
+                        </Link>
+                        <div className="text-xs text-slate-400 capitalize">{item.document_type?.replace(/_/g, ' ')}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium', categoryColors[cat] || categoryColors.General)}>
+                          {cat}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {alerts.length > 0 ? (
+                          <div className="text-xs text-amber-700 font-medium">{alerts[0]}</div>
+                        ) : item.validation?.is_valid === false ? (
+                          <span className="text-xs text-rose-600 font-medium">Validation failed</span>
+                        ) : (
+                          <span className="text-xs text-slate-500">Pending review</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">{safeFloat((item.confidence || {}).overall)?.toFixed(2) || 'N/A'}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant={statusColors[item.status] || 'warning'}>{item.status?.replace(/_/g, ' ') || 'review'}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex items-center gap-1.5">
+                          <Button size="sm" variant="default" className="bg-emerald-600 hover:bg-emerald-700 h-7 text-xs px-2.5 gap-1" onClick={() => handleAction(item.document_id, 'approve')}>
+                            <Check className="h-3 w-3" /> Approve
+                          </Button>
+                          <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50 h-7 text-xs px-2 gap-1" onClick={() => handleAction(item.document_id, 'flag')}>
+                            <AlertCircle className="h-3 w-3" /> Flag
+                          </Button>
+                          <Button size="sm" variant="outline" className="border-rose-300 text-rose-700 hover:bg-rose-50 h-7 text-xs px-2 gap-1" onClick={() => handleAction(item.document_id, 'reject')}>
+                            <X className="h-3 w-3" /> Reject
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}
@@ -2204,6 +2903,537 @@ function SettingsPage({ user }) {
           </Tabs>
         </CardContent>
       </Card>
+    </>
+  )
+}
+
+function WorkflowAutomationPage() {
+  const [activeTab, setActiveTab] = useState('rules')
+  const [rules, setRules] = useState([])
+  const [queue, setQueue] = useState([])
+  const [logs, setLogs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [newRuleModalOpen, setNewRuleModalOpen] = useState(false)
+  const [newRule, setNewRule] = useState({
+    name: '',
+    description: '',
+    rule_type: 'auto_approval',
+    min_confidence: '0.80',
+    min_amount: '',
+    target_status: 'approved',
+  })
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const [rulesData, queueData, logsData] = await Promise.all([
+        fetchWorkflowRules(),
+        fetchWorkflowQueue(),
+        fetchWorkflowLogs(50),
+      ])
+      setRules(rulesData)
+      setQueue(queueData)
+      setLogs(logsData)
+    } catch (err) {
+      toast.error(err.message || 'Failed to load workflow automation data.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const handleExportAuditLogs = () => {
+    if (!logs || logs.length === 0) {
+      toast.info('No audit logs available to export yet.')
+      return
+    }
+    const headers = ['Log ID', 'Document ID', 'Filename', 'Rule Name', 'Action Triggered', 'Previous Status', 'New Status', 'Timestamp']
+    const rows = logs.map((log) => [
+      log.id || '',
+      log.document_id || '',
+      `"${(log.details?.filename || log.document_filename || 'document').replace(/"/g, '""')}"`,
+      `"${(log.rule_name || '').replace(/"/g, '""')}"`,
+      `"${(log.action_taken || '').replace(/"/g, '""')}"`,
+      log.previous_status || '',
+      log.new_status || '',
+      log.created_at || new Date().toISOString(),
+    ])
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement('a')
+    link.setAttribute('href', encodedUri)
+    link.setAttribute('download', `DocuBrix_Workflow_Audit_Trail_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    toast.success('Workflow audit trail exported to CSV!')
+  }
+
+  const handleToggleRule = async (rule) => {
+    try {
+      const updated = await updateWorkflowRule(rule.id, { enabled: !rule.enabled })
+      setRules((prev) => prev.map((r) => (r.id === rule.id ? updated : r)))
+      toast.success(`Rule "${rule.name}" is now ${!rule.enabled ? 'Enabled' : 'Disabled'}.`)
+    } catch (err) {
+      toast.error('Failed to update rule status.')
+    }
+  }
+
+  const handleDeleteRule = async (ruleId) => {
+    try {
+      await deleteWorkflowRule(ruleId)
+      setRules((prev) => prev.filter((r) => r.id !== ruleId))
+      toast.success('Workflow rule removed.')
+    } catch (err) {
+      toast.error('Failed to delete rule.')
+    }
+  }
+
+  const handleCreateRule = async (e) => {
+    e.preventDefault()
+    if (!newRule.name.trim()) {
+      toast.error('Please enter a rule name.')
+      return
+    }
+    try {
+      const conditions = {}
+      if (newRule.min_confidence) {
+        conditions.min_confidence = parseFloat(newRule.min_confidence)
+      }
+      if (newRule.min_amount) {
+        conditions.min_amount = parseFloat(newRule.min_amount)
+      }
+      const payload = {
+        name: newRule.name.trim(),
+        description: newRule.description.trim() || 'Custom automated workflow policy',
+        rule_type: newRule.rule_type,
+        conditions,
+        action: {
+          target_status: newRule.target_status,
+          tag: 'custom_rule_action',
+          notification: `Rule '${newRule.name.trim()}' executed successfully.`,
+        },
+      }
+      const created = await createWorkflowRule(payload)
+      setRules((prev) => [...prev, created])
+      setNewRuleModalOpen(false)
+      setNewRule({
+        name: '',
+        description: '',
+        rule_type: 'auto_approval',
+        min_confidence: '0.80',
+        min_amount: '',
+        target_status: 'approved',
+      })
+      toast.success('Custom workflow rule created.')
+    } catch (err) {
+      toast.error(err.message || 'Failed to create rule.')
+    }
+  }
+
+  const handleQueueAction = async (docId, action) => {
+    try {
+      await executeQueueAction(docId, action, `Action ${action} executed from workflow console`)
+      toast.success(`Document marked as ${action}d.`)
+      loadData()
+    } catch (err) {
+      toast.error(err.message || 'Failed to update queue item.')
+    }
+  }
+
+  const activeCount = rules.filter((r) => r.enabled).length
+  const queueCount = queue.length
+  const autoApprovedCount = logs.filter((l) => l.resulting_status === 'approved').length
+  const flaggedCount = logs.filter((l) => l.resulting_status === 'pending_approval' || l.resulting_status === 'in_compliance_review' || l.resulting_status === 'needs_review').length
+
+  return (
+    <>
+      <PageHeader
+        title="Workflow Automation"
+        subtitle="Manage rules, routing policies, automated quality gates, and review queues across all document categories."
+      />
+
+      {/* Top Metrics Cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+        <Card className="border-l-4 border-l-blue-600">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-medium text-slate-500">Active Rules</div>
+              <div className="text-2xl font-bold text-slate-900 mt-1">{activeCount} / {rules.length}</div>
+            </div>
+            <div className="h-10 w-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+              <Zap className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-amber-500">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-medium text-slate-500">Pending In Queue</div>
+              <div className="text-2xl font-bold text-slate-900 mt-1">{queueCount}</div>
+            </div>
+            <div className="h-10 w-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
+              <Clock className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-emerald-600">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-medium text-slate-500">Auto-Approved</div>
+              <div className="text-2xl font-bold text-slate-900 mt-1">{autoApprovedCount}</div>
+            </div>
+            <div className="h-10 w-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <CheckCheck className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-purple-600">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-medium text-slate-500">Policy Triggered</div>
+              <div className="text-2xl font-bold text-slate-900 mt-1">{flaggedCount}</div>
+            </div>
+            <div className="h-10 w-10 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center">
+              <Sliders className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <TabsList className="bg-slate-200/80 p-1">
+            <TabsTrigger value="rules" className="text-xs gap-1.5">
+              <Zap className="h-3.5 w-3.5" /> Active Rules ({rules.length})
+            </TabsTrigger>
+            <TabsTrigger value="queue" className="text-xs gap-1.5">
+              <Clock className="h-3.5 w-3.5" /> Review Queue ({queueCount})
+            </TabsTrigger>
+            <TabsTrigger value="logs" className="text-xs gap-1.5">
+              <FileText className="h-3.5 w-3.5" /> Audit Logs ({logs.length})
+            </TabsTrigger>
+          </TabsList>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" onClick={handleExportAuditLogs} className="gap-1.5 text-xs text-slate-700 hover:text-slate-900 border-slate-300">
+              <Download className="h-3.5 w-3.5" /> Export Audit Trail (CSV)
+            </Button>
+            <Button size="sm" variant="outline" onClick={loadData} className="gap-1.5 text-xs">
+              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
+            </Button>
+            <Button size="sm" onClick={() => setNewRuleModalOpen(true)} className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white">
+              <Plus className="h-3.5 w-3.5" /> Add Rule
+            </Button>
+          </div>
+        </div>
+
+        {/* Tab 1: Rules Engine */}
+        <TabsContent value="rules" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {rules.map((rule) => {
+              const typeBadgeColors = {
+                auto_approval: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                confidence_gate: 'bg-amber-50 text-amber-700 border-amber-200',
+                alert_trigger: 'bg-rose-50 text-rose-700 border-rose-200',
+                routing_tag: 'bg-blue-50 text-blue-700 border-blue-200',
+              }
+
+              return (
+                <Card key={rule.id} className={cn('border transition-all', rule.enabled ? 'border-slate-200 shadow-sm' : 'border-slate-200/60 opacity-60 bg-slate-50/50')}>
+                  <CardHeader className="p-4 pb-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className={cn('inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider', typeBadgeColors[rule.rule_type] || 'bg-slate-100 text-slate-700 border-slate-200')}>
+                          {rule.rule_type?.replace(/_/g, ' ')}
+                        </span>
+                        <CardTitle className="text-sm font-semibold text-slate-900 mt-1.5">{rule.name}</CardTitle>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleRule(rule)}
+                        className="text-slate-400 hover:text-blue-600 transition"
+                        title={rule.enabled ? 'Click to disable rule' : 'Click to enable rule'}
+                      >
+                        {rule.enabled ? (
+                          <ToggleRight className="h-6 w-6 text-blue-600" />
+                        ) : (
+                          <ToggleLeft className="h-6 w-6 text-slate-400" />
+                        )}
+                      </button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-1 space-y-3">
+                    <p className="text-xs text-slate-600 leading-relaxed">{rule.description}</p>
+                    
+                    <div className="rounded-lg bg-slate-50 p-2.5 text-[11px] space-y-1 border border-slate-100">
+                      <div className="font-medium text-slate-700">Trigger Conditions:</div>
+                      <div className="text-slate-500 font-mono text-[10px]">
+                        {rule.conditions?.min_confidence && `• Confidence >= ${(rule.conditions.min_confidence * 100).toFixed(0)}% `}
+                        {rule.conditions?.max_confidence && `• Confidence < ${(rule.conditions.max_confidence * 100).toFixed(0)}% `}
+                        {rule.conditions?.min_amount && `• Amount >= $${rule.conditions.min_amount} `}
+                        {rule.conditions?.categories && `• Category: ${rule.conditions.categories.join(', ')} `}
+                        {rule.conditions?.document_type && `• Doc Type: ${rule.conditions.document_type} `}
+                      </div>
+                      <div className="pt-1 flex items-center justify-between text-slate-600">
+                        <span>Target Status:</span>
+                        <Badge variant={statusColors[rule.action?.target_status] || 'default'} className="text-[10px] py-0 px-1.5">
+                          {rule.action?.target_status || 'processed'}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {rule.id.startsWith('rule-') && !['rule-auto-approval', 'rule-confidence-gate', 'rule-high-value-invoice', 'rule-academic-verification', 'rule-legal-compliance', 'rule-medical-phi'].includes(rule.id) && (
+                      <div className="pt-1 flex justify-end">
+                        <Button size="sm" variant="ghost" className="h-6 text-[11px] text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2" onClick={() => handleDeleteRule(rule.id)}>
+                          <Trash2 className="h-3 w-3 mr-1" /> Remove
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        </TabsContent>
+
+        {/* Tab 2: Review Queue */}
+        <TabsContent value="queue">
+          <Card>
+            <CardContent className="p-0 overflow-x-auto">
+              {queue.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-12 text-center text-slate-500">
+                  <CheckCircle2 className="mb-2 h-10 w-10 text-emerald-500" />
+                  <div className="text-base font-medium text-slate-800">Queue is clear!</div>
+                  <div className="text-xs text-slate-500">No documents are currently pending manual review or approval.</div>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-left text-slate-600">
+                    <tr>
+                      <th className="px-4 py-3">Document</th>
+                      <th className="px-4 py-3">Category</th>
+                      <th className="px-4 py-3">Triggered Alert / Rule</th>
+                      <th className="px-4 py-3">Confidence</th>
+                      <th className="px-4 py-3">Current Status</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {queue.map((item) => {
+                      const cat = item.category || (item.extracted_fields || {}).category || 'General'
+                      const alerts = (item.workflow || {}).alerts || []
+                      return (
+                        <tr key={item.document_id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 font-medium text-slate-900">
+                            <Link to={`/documents/${item.document_id}`} className="text-blue-700 hover:underline">
+                              {item.filename}
+                            </Link>
+                            <div className="text-xs text-slate-400 capitalize">{item.document_type?.replace(/_/g, ' ')}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium', categoryColors[cat] || categoryColors.General)}>
+                              {cat}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {alerts.length > 0 ? (
+                              <div className="text-xs text-amber-700 font-medium">{alerts[0]}</div>
+                            ) : item.validation?.is_valid === false ? (
+                              <span className="text-xs text-rose-600 font-medium">Validation failed</span>
+                            ) : (
+                              <span className="text-xs text-slate-500">Review required</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">{safeFloat((item.confidence || {}).overall)?.toFixed(2) || 'N/A'}</td>
+                          <td className="px-4 py-3">
+                            <Badge variant={statusColors[item.status] || 'warning'}>{item.status?.replace(/_/g, ' ') || 'review'}</Badge>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="inline-flex items-center gap-1.5">
+                              <Button size="sm" variant="default" className="bg-emerald-600 hover:bg-emerald-700 h-7 text-xs px-2.5 gap-1" onClick={() => handleQueueAction(item.document_id, 'approve')}>
+                                <Check className="h-3 w-3" /> Approve
+                              </Button>
+                              <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50 h-7 text-xs px-2 gap-1" onClick={() => handleQueueAction(item.document_id, 'flag')}>
+                                <AlertCircle className="h-3 w-3" /> Flag
+                              </Button>
+                              <Button size="sm" variant="outline" className="border-rose-300 text-rose-700 hover:bg-rose-50 h-7 text-xs px-2 gap-1" onClick={() => handleQueueAction(item.document_id, 'reject')}>
+                                <X className="h-3 w-3" /> Reject
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 3: Execution Audit Logs */}
+        <TabsContent value="logs">
+          <Card>
+            <CardContent className="p-0 overflow-x-auto">
+              {logs.length === 0 ? (
+                <div className="p-8 text-center text-sm text-slate-500">No automation logs recorded yet. Upload a document to trigger the workflow engine.</div>
+              ) : (
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-left text-slate-600">
+                    <tr>
+                      <th className="px-4 py-3">Timestamp</th>
+                      <th className="px-4 py-3">Document</th>
+                      <th className="px-4 py-3">Category</th>
+                      <th className="px-4 py-3">Triggered Policy</th>
+                      <th className="px-4 py-3">Resulting Status</th>
+                      <th className="px-4 py-3">Tags Applied</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {logs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-50 font-mono text-xs">
+                        <td className="px-4 py-3 text-slate-500">{formatDate(log.timestamp)}</td>
+                        <td className="px-4 py-3 font-sans font-medium text-slate-900">{log.filename}</td>
+                        <td className="px-4 py-3 font-sans">
+                          <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium', categoryColors[log.category] || categoryColors.General)}>
+                            {log.category}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-sans text-slate-700">
+                          {log.triggered_rules?.length > 0 ? (
+                            <span className="text-blue-700 font-medium">{log.triggered_rules.join(', ')}</span>
+                          ) : (
+                            <span className="text-slate-400">None</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-sans">
+                          <Badge variant={statusColors[log.resulting_status] || 'default'} className="text-[11px]">
+                            {log.resulting_status?.replace(/_/g, ' ')}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">
+                          {log.tags?.length > 0 ? log.tags.map((t) => (
+                            <span key={t} className="inline-block bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] mr-1">
+                              #{t}
+                            </span>
+                          )) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Add Custom Rule Dialog */}
+      {newRuleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="text-base font-semibold text-slate-900">Create Workflow Automation Rule</div>
+              <button type="button" onClick={() => setNewRuleModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateRule} className="mt-4 space-y-3 text-sm">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Rule Name</label>
+                <Input
+                  placeholder="e.g. Auto-Approve Verified Academic Marksheets"
+                  value={newRule.name}
+                  onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
+                <Input
+                  placeholder="e.g. Automatically approve transcripts with confidence over 80%"
+                  value={newRule.description}
+                  onChange={(e) => setNewRule({ ...newRule, description: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Rule Type</label>
+                  <select
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={newRule.rule_type}
+                    onChange={(e) => setNewRule({ ...newRule, rule_type: e.target.value })}
+                  >
+                    <option value="auto_approval">Auto Approval</option>
+                    <option value="confidence_gate">Confidence Gate</option>
+                    <option value="alert_trigger">Alert Trigger</option>
+                    <option value="routing_tag">Routing Policy</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Target Status</label>
+                  <select
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={newRule.target_status}
+                    onChange={(e) => setNewRule({ ...newRule, target_status: e.target.value })}
+                  >
+                    <option value="approved">Approved</option>
+                    <option value="needs_review">Needs Review</option>
+                    <option value="pending_approval">Pending Approval</option>
+                    <option value="verified">Verified</option>
+                    <option value="flagged">Flagged</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Min Confidence (0-1)</label>
+                  <Input
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    max="1"
+                    placeholder="0.80"
+                    value={newRule.min_confidence}
+                    onChange={(e) => setNewRule({ ...newRule, min_confidence: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Min Amount ($ optional)</label>
+                  <Input
+                    type="number"
+                    placeholder="1000"
+                    value={newRule.min_amount}
+                    onChange={(e) => setNewRule({ ...newRule, min_amount: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <Button type="button" variant="outline" size="sm" onClick={() => setNewRuleModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+                  Save Rule
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   )
 }

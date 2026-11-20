@@ -277,10 +277,17 @@ function LandingPage({ user }) {
         </section>
       </main>
 
-      {/* Academic Footer */}
+      {/* Product Footer */}
       <footer className="border-t border-slate-800/80 py-8 px-6 text-center text-xs text-slate-500">
-        <p>DocuBrix • B.Tech Minor Project Final Evaluation • University School of Automation &amp; Robotics (USAR), GGSIPU</p>
-        <p className="mt-1 text-slate-600">Students: Pranav Bisht &amp; Dhruv Grover • Supervisor: Dr. Bhanu Prakash Joshi</p>
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <img src="/docubrix-logo.png" alt="DocuBrix" className="h-6 w-auto object-contain rounded bg-white/95 px-1.5 py-0.5" />
+            <span className="font-semibold text-slate-300">DocuBrix</span>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-400">Intelligent Document Lifecycle &amp; Workflows</span>
+          </div>
+          <p className="text-slate-500">&copy; 2026 DocuBrix. All rights reserved.</p>
+        </div>
       </footer>
     </div>
   )

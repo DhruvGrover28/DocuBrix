@@ -11,6 +11,7 @@ import {
   ChevronRight,
   CircleDashed,
   Clock,
+  Download,
   Edit3,
   FileText,
   Filter,
@@ -724,6 +725,109 @@ function DashboardPage() {
   )
 }
 
+const DEMO_PRESETS = [
+  {
+    id: 'financial',
+    label: 'Sample Invoice ($4,250)',
+    icon: '📄',
+    badge: 'Financial',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    filename: 'Sample_Invoice_INV2026.txt',
+    text: `TAX INVOICE
+TechCorp Solutions Inc.
+100 Enterprise Way, Suite 400, San Francisco, CA
+Invoice No: INV-2026-9041
+Invoice Date: 2026-11-18
+Due Date: 2026-12-18
+Bill To: Global Logistics Enterprise
+
+Description: Cloud Infrastructure & AI Pipeline Hosting Services
+Amount: $4,250.00
+Tax Due: $340.00
+Total Due: $4,590.00
+Payment Terms: Net 30
+Vendor Contact: accounts@techcorp-solutions.com
+GSTIN: 07AAAAA0000A1Z5`,
+  },
+  {
+    id: 'academic',
+    label: 'Academic Transcript (USAR)',
+    icon: '🎓',
+    badge: 'Academic',
+    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+    filename: 'Sample_Academic_Transcript_USAR.txt',
+    text: `GURU GOBIND SINGH INDRAPRASTHA UNIVERSITY
+UNIVERSITY SCHOOL OF AUTOMATION & ROBOTICS (USAR)
+East Delhi Campus, Surajmal Vihar, Delhi - 110092
+ACADEMIC TRANSCRIPT / GRADE REPORT
+
+Candidate Name: Pranav Bisht
+Enrollment No: 03119011922
+University: Guru Gobind Singh Indraprastha University (USAR)
+Course: Bachelor of Technology (B.Tech) - Artificial Intelligence & Data Science
+Semester: 7th Semester (Academic Year 2026)
+
+Course Code | Course Title | Credits | Grade
+AIDS-401   | Deep Learning & Neural Architectures | 4 | A+
+AIDS-403   | Natural Language Processing & LLMs   | 4 | O
+AIDS-405   | Cloud Computing & Microservices      | 3 | A+
+AIDS-407   | Document AI & Workflow Automation    | 4 | O
+AIDS-451   | Minor Project Evaluation I           | 4 | O
+
+Semester SGPA: 9.20
+Cumulative CGPA: 8.85
+Result: Passed with Distinction`,
+  },
+  {
+    id: 'medical',
+    label: 'Medical Prescription (Apollo)',
+    icon: '🏥',
+    badge: 'Medical',
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+    filename: 'Sample_Prescription_Apollo.txt',
+    text: `APOLLO HOSPITALS ENTERPRISE LTD.
+Department of Cardiology & Internal Medicine
+PRESCRIPTION & CLINICAL SUMMARY
+
+Date: 2026-11-15
+Patient Name: Rajesh Sharma
+Age: 52 | Gender: Male
+Patient ID: MED-2026-77821
+Doctor: Dr. Arvind Mehra, MD (Cardiology)
+
+Diagnosis: Primary Hypertension & Mild Dyslipidemia
+Vitals: BP: 142/90 mmHg | Pulse: 78 bpm | SpO2: 98%
+
+Rx (Prescription):
+1. Tab. Telmisartan 40mg - 1 tab once daily in morning (30 days)
+2. Tab. Atorvastatin 10mg - 1 tab once daily at bedtime (30 days)
+
+Special Instructions: Low sodium diet, 30 min daily walking.
+CONFIDENTIAL MEDICAL RECORD - PROTECTED HEALTH INFORMATION (PHI)`,
+  },
+  {
+    id: 'legal',
+    label: 'Mutual NDA Agreement',
+    icon: '⚖️',
+    badge: 'Legal',
+    badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
+    filename: 'Sample_Mutual_NDA_Legal.txt',
+    text: `MUTUAL NON-DISCLOSURE AND CONFIDENTIALITY AGREEMENT
+
+This Mutual Non-Disclosure Agreement is entered into on 2026-11-10, by and between:
+Party A: DocuBrix Technologies Pvt. Ltd., New Delhi, India; and
+Party B: Horizon Ventures Inc., San Francisco, CA, USA.
+
+1. Purpose: Strategic evaluation of document intelligence and workflow automation systems.
+2. Confidential Information: Technical designs, algorithms, architectures, and proprietary models.
+3. Term: The non-disclosure obligations shall survive for three (3) years from the Effective Date.
+4. Governing Law: This Agreement shall be construed in accordance with Delaware law.
+
+Signed for Party A: Pranav Bisht, Lead Engineer
+Signed for Party B: Marcus Vance, Managing Partner`,
+  },
+]
+
 function ProcessingPage() {
   const [selectedFile, setSelectedFile] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -731,23 +835,38 @@ function ProcessingPage() {
   const [manualFields, setManualFields] = useState({})
   const [reviewSaving, setReviewSaving] = useState(false)
 
-  const handleUpload = async () => {
-    if (!selectedFile) {
-      toast.error('Please select a file to upload.')
-      return
-    }
-
+  const processFile = async (file) => {
+    if (!file) return
     try {
       setUploading(true)
-      const response = await uploadDocument(selectedFile)
+      const response = await uploadDocument(file)
       setDocumentResult(response)
       const fields = response.extracted_fields || {}
       setManualFields(Object.fromEntries(Object.entries(fields).filter(([key]) => key !== 'document_type')))
-      toast.success('Document processed successfully.')
+      toast.success(`Successfully analyzed ${file.name}`)
     } catch (error) {
-      toast.error(error.response?.data?.detail || error.message || 'Upload failed.')
+      toast.error(error.response?.data?.detail || error.message || 'Processing failed.')
     } finally {
       setUploading(false)
+    }
+  }
+
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      toast.error('Please select a file or choose a demo preset.')
+      return
+    }
+    await processFile(selectedFile)
+  }
+
+  const handleSelectPreset = async (preset, autoProcess = true) => {
+    const file = new File([preset.text], preset.filename, { type: 'text/plain' })
+    setSelectedFile(file)
+    if (autoProcess) {
+      toast.info(`Processing ${preset.label}...`)
+      await processFile(file)
+    } else {
+      toast.info(`Selected ${preset.label}. Click "Process document" to run.`)
     }
   }
 
@@ -771,7 +890,50 @@ function ProcessingPage() {
 
   return (
     <>
-      <PageHeader title="Document Processing" subtitle="Upload a PDF or image and review the extracted data before final approval." />
+      <PageHeader
+        title="Intelligent Document Processing"
+        subtitle="Upload or test documents across Financial, Academic, Medical, Legal, or Administrative domains with automated OCR, ML classification, field extraction, and workflow validation."
+      />
+
+      {/* 1-Click Demo Presets */}
+      <Card className="mb-6 border-slate-200 shadow-sm bg-gradient-to-r from-slate-50 via-white to-blue-50/30">
+        <CardContent className="p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                Live Viva / Demo Presets
+              </span>
+              <h3 className="text-sm font-semibold text-slate-800 mt-1">1-Click Multi-Domain Test Documents</h3>
+            </div>
+            <span className="text-xs text-slate-500">Click any preset to test end-to-end OCR and workflow triggers</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {DEMO_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => handleSelectPreset(preset, true)}
+                disabled={uploading}
+                className="flex flex-col items-start p-3 rounded-xl border border-slate-200/90 bg-white hover:border-blue-400 hover:shadow-md transition-all text-left group disabled:opacity-60"
+              >
+                <div className="flex items-center justify-between w-full mb-1.5">
+                  <span className="text-xl">{preset.icon}</span>
+                  <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border', preset.badgeClass)}>
+                    {preset.badge}
+                  </span>
+                </div>
+                <div className="text-xs font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
+                  {preset.label}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5 font-mono truncate w-full">
+                  {preset.filename}
+                </div>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-6">
@@ -782,25 +944,25 @@ function ProcessingPage() {
                   <UploadCloud className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="font-medium text-slate-900">Upload financial document</div>
-                  <div className="text-sm text-slate-500">PDF, PNG, JPG, JPEG</div>
+                  <div className="font-medium text-slate-900">Upload document for intelligent analysis</div>
+                  <div className="text-sm text-slate-500">PDF, PNG, JPG, JPEG, TXT (Up to 25MB)</div>
                 </div>
               </div>
               <input
                 type="file"
                 className="mt-4 block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
-                accept=".pdf,.png,.jpg,.jpeg"
+                accept=".pdf,.png,.jpg,.jpeg,.txt"
                 onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
               />
             </div>
             <Button onClick={handleUpload} disabled={!selectedFile || uploading}>
-              {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : 'Process document'}
+              {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Analyzing Document...</> : 'Process document'}
             </Button>
           </div>
 
           {selectedFile && (
             <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              <span>{selectedFile.name}</span>
+              <span className="font-medium">{selectedFile.name}</span>
               <span>{Math.round((selectedFile.size || 0) / 1024)} KB</span>
             </div>
           )}
@@ -2475,6 +2637,33 @@ function WorkflowAutomationPage() {
     loadData()
   }, [])
 
+  const handleExportAuditLogs = () => {
+    if (!logs || logs.length === 0) {
+      toast.info('No audit logs available to export yet.')
+      return
+    }
+    const headers = ['Log ID', 'Document ID', 'Filename', 'Rule Name', 'Action Triggered', 'Previous Status', 'New Status', 'Timestamp']
+    const rows = logs.map((log) => [
+      log.id || '',
+      log.document_id || '',
+      `"${(log.details?.filename || log.document_filename || 'document').replace(/"/g, '""')}"`,
+      `"${(log.rule_name || '').replace(/"/g, '""')}"`,
+      `"${(log.action_taken || '').replace(/"/g, '""')}"`,
+      log.previous_status || '',
+      log.new_status || '',
+      log.created_at || new Date().toISOString(),
+    ])
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement('a')
+    link.setAttribute('href', encodedUri)
+    link.setAttribute('download', `DocuBrix_Workflow_Audit_Trail_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    toast.success('Workflow audit trail exported to CSV!')
+  }
+
   const handleToggleRule = async (rule) => {
     try {
       const updated = await updateWorkflowRule(rule.id, { enabled: !rule.enabled })
@@ -2624,7 +2813,10 @@ function WorkflowAutomationPage() {
             </TabsTrigger>
           </TabsList>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" onClick={handleExportAuditLogs} className="gap-1.5 text-xs text-slate-700 hover:text-slate-900 border-slate-300">
+              <Download className="h-3.5 w-3.5" /> Export Audit Trail (CSV)
+            </Button>
             <Button size="sm" variant="outline" onClick={loadData} className="gap-1.5 text-xs">
               <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
             </Button>

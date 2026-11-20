@@ -88,11 +88,11 @@ def cosine_similarity(a: list[float] | None, b: list[float] | None) -> float:
 
 
 def is_embedding_configured() -> bool:
-    return True
+    return bool(get_embedding_api_key())
 
 
 def is_llm_configured() -> bool:
-    return True
+    return bool(get_gemini_api_key())
 
 
 def get_embedding(text: str) -> list[float]:
@@ -285,12 +285,14 @@ def build_gemini_prompt(question: str, sources: list[dict[str, Any]]) -> str:
 
 def generate_grounded_answer(question: str, sources: list[dict[str, Any]]) -> str:
     api_key = get_gemini_api_key()
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+    if not api_key:
+        logger.error(
+            "[Gemini Diagnostic] [missing_api_key] GEMINI_API_KEY environment variable is not configured."
+        )
+        raise RuntimeError("GEMINI_API_KEY is not configured")
     if not sources:
         return "The available document content does not contain enough information to answer this question."
-    if not api_key:
-        top_chunks = [f"• From {s.get('filename', 'document')} (chunk {s.get('chunk_index', 0)}): \"{s.get('content', '').strip()}\"" for s in sources[:3]]
-        return "Based on verified document records:\n" + "\n\n".join(top_chunks)
 
     try:
         prompt = build_gemini_prompt(question, sources)
@@ -442,17 +444,12 @@ def generate_chat_answer(
     chat_history: list[dict[str, str]] | None = None,
 ) -> str:
     api_key = get_gemini_api_key()
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
     if not api_key:
-        if not sources:
-            return "I am DocuBrix AI Assistant. Please upload documents to your workspace, and I will extract their metadata, analyze their contents, and answer questions grounded in your document records."
-        top_chunks = [f"• From {s.get('filename', 'document')} (chunk {s.get('chunk_index', 0)}):\n\"{s.get('content', '').strip()}\"" for s in sources[:3]]
-        sources_summary = "\n\n".join(top_chunks)
-        return (
-            f"Based on your uploaded documents, here is the verified information for your inquiry:\n\n"
-            f"{sources_summary}\n\n"
-            f"[Grounded retrieval: {len(sources)} matching context source(s) found in workspace]"
+        logger.error(
+            "[Gemini Diagnostic] [missing_api_key] GEMINI_API_KEY environment variable is not configured."
         )
+        raise RuntimeError("GEMINI_API_KEY is not configured")
 
     try:
         prompt = build_chat_prompt(question, sources, chat_history=chat_history)

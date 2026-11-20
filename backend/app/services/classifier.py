@@ -154,6 +154,13 @@ def _heuristic_label_and_confidence(raw_text: str) -> tuple[str, str, float, dic
     if "transcript" in normalized or "marksheet" in normalized or "grade card" in normalized:
         raw_scores["academic_transcript"] += 4.0
 
+    # Suppress false salary slip matches if academic or project keywords exist
+    academic_keywords = ("roll number", "enrollment", "b.tech", "semester", "student", "group member", "minor project", "university school")
+    if any(k in normalized for k in academic_keywords):
+        raw_scores["salary_slip"] = 0.0
+        if "transcript" not in normalized and "marksheet" not in normalized:
+            raw_scores["official_notice"] += 2.0
+
     best_type = max(raw_scores, key=raw_scores.get)
     best_score = raw_scores[best_type]
 

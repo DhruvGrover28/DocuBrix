@@ -1,6 +1,12 @@
 import axios from 'axios'
 
-let rawApiUrl = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:8000' : 'https://docubrix-api-jhtg.onrender.com')
+const isLocalHost = typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1' ||
+  window.location.hostname === '0.0.0.0' ||
+  window.location.hostname === '::1'
+)
+let rawApiUrl = import.meta.env.VITE_API_URL || (isLocalHost ? 'http://localhost:8000' : 'https://docubrix-api-jhtg.onrender.com')
 if (rawApiUrl && !rawApiUrl.startsWith('http://') && !rawApiUrl.startsWith('https://')) {
   rawApiUrl = `https://${rawApiUrl}`
 }
@@ -9,7 +15,7 @@ export const AUTH_TOKEN_KEY = 'docubrix-access-token'
 
 export const api = axios.create({
   baseURL: API_URL,
-  timeout: 30000,
+  timeout: 90000,
 })
 
 api.interceptors.request.use((config) => {

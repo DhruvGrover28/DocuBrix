@@ -133,6 +133,44 @@ def extract_layout_summary(raw_text: str) -> dict[str, Any]:
     }
 
 
+def _clean_person_name(val: str | None) -> str:
+    if not val:
+        return ""
+    val = re.sub(r"^[\s\-:o•*]+", "", val).strip()
+    val = re.sub(r"[\s\-:o•*]+$", "", val).strip()
+    lower = val.lower().strip()
+    if lower in ("na", "n/a", "unknown", "not available", "none", "null", "undefined", "employer", "employee"):
+        return ""
+    disallowed_phrases = [
+        "roll number", "group member", "each group", "guidelines", "instructions",
+        "evaluation", "project", "format", "subject", "minor project", "b.tech", "semester",
+        "name and", "complete roll", "page", "table", "signature", "supervisor",
+        "department", "school", "emp-", "id-", "ref-"
+    ]
+    if any(phrase in lower for phrase in disallowed_phrases):
+        return ""
+    if len(val) < 2 or len(val) > 50:
+        return ""
+    if not re.match(r"^[A-Za-z\s.'\-]+$", val):
+        return ""
+    return val
+
+
+def _clean_period(val: str | None) -> str:
+    if not val:
+        return ""
+    val = val.strip(" \t\r\n:;,-()[]{}").strip()
+    if len(val) < 3 or val in (")", "(", "]", "["):
+        return ""
+    months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "q1", "q2", "q3", "q4"]
+    has_month = any(m in val.lower() for m in months)
+    has_year = bool(re.search(r"\b20\d{2}\b", val))
+    has_date = bool(re.search(r"\d{1,2}[-/.]\d{1,2}", val))
+    if not (has_month or has_year or has_date):
+        return ""
+    return val
+
+
 def extract_domain_fields(raw_text: str, document_type: str | None = None) -> dict[str, Any]:
     norm_type = document_type or classify_document(raw_text)
     text = raw_text.replace("\r\n", "\n").replace("\r", "\n")
@@ -159,8 +197,8 @@ def extract_domain_fields(raw_text: str, document_type: str | None = None) -> di
             total_amount = amounts[-1].replace("$", "").replace("₹", "").strip()
 
         field_map.update({
-            "vendor": vendor or "Unknown Vendor",
-            "invoice_number": invoice_number or "INV-UNKNOWN",
+            "vendor": vendor or "",
+            "invoice_number": invoice_number or "",
             "document_date": date or primary_date,
             "due_date": due_date or "",
             "total_amount": total_amount or "",
@@ -177,41 +215,48 @@ def extract_domain_fields(raw_text: str, document_type: str | None = None) -> di
         payment_method = _match_first(r"(?:payment\s*method|paid\s*via|tender)\s*[:\-]?\s*(cash|credit\s*card|debit\s*card|upi|visa|mastercard)", text) or "Card/Electronic"
 
         field_map.update({
-            "merchant": merchant or "Unknown Merchant",
-            "receipt_number": receipt_number or "REC-UNKNOWN",
+            "merchant": merchant or "",
+            "receipt_number": receipt_number or "",
             "document_date": primary_date or "",
             "total_amount": total_amount or "",
             "payment_method": payment_method,
         })
 
     elif norm_type == "bank_statement":
-        account_name = _match_first(r"(?:account\s*name|holder\s*name|customer\s*name)\s*[:\-]?\s*(.+?)(?:\n|$)", text)
+        account_name = _clean_person_name(_match_first(r"(?:account\s*name|holder\s*name|customer\s*name)\s*[:\-]\s*(.+?)(?:\n|$)", text))
         account_number = _match_first(r"(?:account\s*(?:no|number)?|a/c\s*(?:no)?)\s*[:\-]?\s*([A-Za-z0-9\-X*]+)", text)
         opening_balance = _match_first(r"(?:opening\s*balance|beginning\s*balance|starting\s*balance)\s*[:\-]?\s*[\$₹€£]?\s*(\d+(?:,\d{3})*(?:\.\d+)?)", text)
         closing_balance = _match_first(r"(?:closing\s*balance|ending\s*balance|available\s*balance)\s*[:\-]?\s*[\$₹€£]?\s*(\d+(?:,\d{3})*(?:\.\d+)?)", text)
 
         field_map.update({
-            "account_name": account_name or "Unknown Account Holder",
-            "account_number": account_number or "AC-XXXX",
+            "account_name": account_name or "",
+            "account_number": account_number or "",
             "document_date": primary_date or "",
             "beginning_balance": opening_balance or "",
             "ending_balance": closing_balance or "",
         })
 
     elif norm_type == "salary_slip":
-        employee_name = _match_first(r"(?:employee\s*name|name)\s*[:\-]?\s*(.+?)(?:\n|$)", text)
-        employee_id = _match_first(r"(?:employee\s*(?:id|code)|emp\s*id)\s*[:\-]?\s*([A-Za-z0-9\-]+)", text)
-        employer_name = _match_first(r"(?:company\s*name|employer|organization)\s*[:\-]?\s*(.+?)(?:\n|$)", text)
-        pay_period = _match_first(r"(?:pay\s*period|month\s*(?:of)?|salary\s*for)\s*[:\-]?\s*(.+?)(?:\n|$)", text)
+        employee_name = _clean_person_name(
+            _match_first(r"(?:employee\s*name|name\s*of\s*(?:the\s*)?employee|emp\s*name)\s*[:\-]\s*([^\n\r]+)", text)
+            or _match_first(r"(?:^|\n)\s*name\s*[:\-]\s*([A-Za-z\s.]+?)(?:\n|$)", text)
+        )
+        employee_id = _match_first(r"(?:employee\s*(?:id|code)|emp\s*(?:id|code))\s*[:\-]\s*([A-Za-z0-9\-]+)", text)
+        employer_name = _clean_person_name(
+            _match_first(r"(?:company\s*name|employer\s*name|employer|organization)\s*[:\-]\s*([^\n\r]+)", text)
+        )
+        pay_period = _clean_period(
+            _match_first(r"(?:pay\s*period|salary\s*for\s*(?:the\s*month\s*of)?|month\s*of\s*pay)\s*[:\-]?\s*([A-Za-z0-9\s,\-/]+?)(?:\n|$)", text)
+        )
         gross_pay = _match_first(r"(?:gross\s*(?:salary|pay|earnings))\s*[:\-]?\s*[\$₹€£]?\s*(\d+(?:,\d{3})*(?:\.\d+)?)", text)
         net_pay = _match_first(r"(?:net\s*(?:salary|pay|take\s*home))\s*[:\-]?\s*[\$₹€£]?\s*(\d+(?:,\d{3})*(?:\.\d+)?)", text)
         deductions = _match_first(r"(?:total\s*deductions|deductions)\s*[:\-]?\s*[\$₹€£]?\s*(\d+(?:,\d{3})*(?:\.\d+)?)", text)
 
         field_map.update({
-            "employee_name": employee_name or "Unknown Employee",
-            "employee_id": employee_id or "EMP-XXXX",
-            "employer_name": employer_name or "Employer",
-            "pay_period": pay_period or "Current Month",
+            "employee_name": employee_name or "",
+            "employee_id": employee_id or "",
+            "employer_name": employer_name or "",
+            "pay_period": pay_period or "",
             "gross_pay": gross_pay or "",
             "net_pay": net_pay or "",
             "deductions": deductions or "",
@@ -220,7 +265,7 @@ def extract_domain_fields(raw_text: str, document_type: str | None = None) -> di
 
     # 2. ACADEMIC DOCUMENTS
     elif norm_type == "academic_transcript":
-        student_name = _match_first(r"(?:student\s*name|name\s*of\s*student|candidate\s*name)\s*[:\-]?\s*(.+?)(?:\n|$)", text)
+        student_name = _clean_person_name(_match_first(r"(?:student\s*name|name\s*of\s*student|candidate\s*name)\s*[:\-]?\s*(.+?)(?:\n|$)", text))
         roll_number = _match_first(r"(?:roll\s*(?:no|number)?|registration\s*(?:no|number)?|enrollment\s*no)\s*[:\-]?\s*([A-Za-z0-9\-]+)", text)
         institution = _match_first(r"(?:university|institute|college|board|school)\s*[:\-]?\s*(.+?)(?:\n|$)", text)
         if not institution:
@@ -231,94 +276,94 @@ def extract_domain_fields(raw_text: str, document_type: str | None = None) -> di
         result_status = _match_first(r"(?:result|status|division)\s*[:\-]?\s*(pass|first\s*class|distinction|cleared|promoted|fail)", text) or "Pass"
 
         field_map.update({
-            "student_name": student_name or "Student Name",
-            "roll_number": roll_number or "ROLL-XXXX",
-            "institution_name": institution or "Academic Institution",
-            "program_name": program or "Undergraduate / Graduate Program",
-            "semester_year": semester or "Semester",
+            "student_name": student_name or "",
+            "roll_number": roll_number or "",
+            "institution_name": institution or "",
+            "program_name": program or "",
+            "semester_year": semester or "",
             "cgpa_percentage": cgpa or "",
             "result_status": result_status,
             "document_date": primary_date or "",
         })
 
     elif norm_type == "academic_certificate":
-        recipient_name = _match_first(r"(?:conferred\s*upon|awarded\s*to|certifies\s*that)\s*[:\-]?\s*(.+?)(?:\n|,|who)", text)
+        recipient_name = _clean_person_name(_match_first(r"(?:conferred\s*upon|awarded\s*to|certifies\s*that)\s*[:\-]?\s*(.+?)(?:\n|,|who)", text))
         institution = _match_first(r"([A-Z\s]{4,50}(?:UNIVERSITY|INSTITUTE|ACADEMY|COLLEGE))\b", text)
         degree_name = _match_first(r"(?:degree\s*of|diploma\s*in|certificate\s*in)\s*[:\-]?\s*(.+?)(?:\n|,|in)", text)
         major = _match_first(r"(?:major\s*in|specialization\s*in|in\s*the\s*field\s*of)\s*[:\-]?\s*(.+?)(?:\n|,)", text)
 
         field_map.update({
-            "recipient_name": recipient_name or "Recipient Name",
-            "institution_name": institution or "Issuing Institution",
-            "degree_name": degree_name or "Degree / Certificate",
-            "major_discipline": major or "Field of Study",
+            "recipient_name": recipient_name or "",
+            "institution_name": institution or "",
+            "degree_name": degree_name or "",
+            "major_discipline": major or "",
             "document_date": primary_date or "",
         })
 
     # 3. LEGAL DOCUMENTS
     elif norm_type in ("legal_contract", "non_disclosure_agreement"):
         contract_title = _match_first(r"^([A-Z0-9\s\-]{4,50}(?:AGREEMENT|CONTRACT|DEED|MEMORANDUM))\b", text) or ("Non-Disclosure Agreement" if norm_type == "non_disclosure_agreement" else "Legal Agreement")
-        party_one = _match_first(r"(?:between|disclosing\s*party|first\s*party)\s*[:\-]?\s*(.+?)(?:\n|,|and|\()", text)
-        party_two = _match_first(r"(?:and|receiving\s*party|second\s*party)\s*[:\-]?\s*(.+?)(?:\n|,|\()", text)
+        party_one = _clean_person_name(_match_first(r"(?:between|disclosing\s*party|first\s*party)\s*[:\-]?\s*(.+?)(?:\n|,|and|\()", text))
+        party_two = _clean_person_name(_match_first(r"(?:and|receiving\s*party|second\s*party)\s*[:\-]?\s*(.+?)(?:\n|,|\()", text))
         effective_date = _match_first(r"(?:effective\s*date|dated\s*as\s*of|entered\s*into\s*on)\s*[:\-]?\s*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})", text) or primary_date
         term_period = _match_first(r"(?:term|duration|period\s*of\s*agreement)\s*[:\-]?\s*(.+?)(?:\n|$)", text)
         governing_law = _match_first(r"(?:governing\s*law|jurisdiction\s*of|laws\s*of)\s*[:\-]?\s*(.+?)(?:\n|\.|$)", text)
 
         field_map.update({
             "contract_title": contract_title,
-            "party_one": party_one or "Party A",
-            "party_two": party_two or "Party B",
+            "party_one": party_one or "",
+            "party_two": party_two or "",
             "effective_date": effective_date or "",
-            "term_period": term_period or "Standard Term",
-            "governing_law": governing_law or "Jurisdiction",
+            "term_period": term_period or "",
+            "governing_law": governing_law or "",
             "document_date": effective_date or primary_date,
         })
 
     # 4. MEDICAL DOCUMENTS
     elif norm_type == "medical_prescription":
-        patient_name = _match_first(r"(?:patient\s*name|name)\s*[:\-]?\s*(.+?)(?:\n|,|age|$)", text)
+        patient_name = _clean_person_name(_match_first(r"(?:patient\s*name|patient)\s*[:\-]\s*(.+?)(?:\n|,|age|$)", text))
         patient_age = _match_first(r"(?:age|age/sex|age/gender)\s*[:\-]?\s*(\d+\s*(?:yrs|years)?(?:\s*/\s*[MFmf])?)", text)
-        doctor_name = _match_first(r"(?:dr\.|doctor\s*name|consultant)\s*[:\-]?\s*([A-Za-z\s.]+?)(?:\n|,|$)", text)
+        doctor_name = _clean_person_name(_match_first(r"(?:dr\.|doctor\s*name|consultant)\s*[:\-]?\s*([A-Za-z\s.]+?)(?:\n|,|$)", text))
         clinic_hospital = _match_first(r"(?:clinic|hospital|healthcare|centre)\s*[:\-]?\s*(.+?)(?:\n|$)", text)
         medications = _match_first(r"(?:rx|medications?|prescriptions?)\s*[:\-]?\s*(.+?)(?:\n\n|\Z)", text)
 
         field_map.update({
-            "patient_name": patient_name or "Patient Name",
+            "patient_name": patient_name or "",
             "patient_age_gender": patient_age or "",
-            "doctor_name": (f"Dr. {doctor_name}".replace("Dr. Dr.", "Dr.")) if doctor_name else "Consulting Physician",
-            "clinic_hospital": clinic_hospital or "Healthcare Center",
-            "medications_notes": medications[:120] if medications else "Prescribed therapy",
+            "doctor_name": (f"Dr. {doctor_name}".replace("Dr. Dr.", "Dr.")) if doctor_name else "",
+            "clinic_hospital": clinic_hospital or "",
+            "medications_notes": medications[:120] if medications else "",
             "document_date": primary_date or "",
         })
 
     elif norm_type == "medical_lab_report":
-        patient_name = _match_first(r"(?:patient\s*name|name)\s*[:\-]?\s*(.+?)(?:\n|,|$)", text)
+        patient_name = _clean_person_name(_match_first(r"(?:patient\s*name|patient)\s*[:\-]\s*(.+?)(?:\n|,|$)", text))
         lab_name = _match_first(r"(?:lab(?:oratory)?|diagnostic|pathology)\s*[:\-]?\s*(.+?)(?:\n|$)", text)
         test_name = _match_first(r"(?:test\s*name|investigation|parameter)\s*[:\-]?\s*(.+?)(?:\n|$)", text)
         observed_value = _match_first(r"(?:result|observed\s*value|value)\s*[:\-]?\s*(.+?)(?:\n|$)", text)
         reference_range = _match_first(r"(?:reference\s*(?:range|interval)|normal\s*range)\s*[:\-]?\s*(.+?)(?:\n|$)", text)
 
         field_map.update({
-            "patient_name": patient_name or "Patient Name",
-            "laboratory_name": lab_name or "Diagnostic Laboratory",
-            "test_name": test_name or "Clinical Diagnostic Test",
-            "observed_value": observed_value or "Observed Reading",
-            "reference_range": reference_range or "Standard Range",
+            "patient_name": patient_name or "",
+            "laboratory_name": lab_name or "",
+            "test_name": test_name or "",
+            "observed_value": observed_value or "",
+            "reference_range": reference_range or "",
             "document_date": primary_date or "",
         })
 
     # 5. ADMINISTRATIVE DOCUMENTS
     elif norm_type == "identity_document":
-        full_name = _match_first(r"(?:name|full\s*name|holder)\s*[:\-]?\s*(.+?)(?:\n|$)", text)
+        full_name = _clean_person_name(_match_first(r"(?:full\s*name|holder\s*name|cardholder)\s*[:\-]\s*(.+?)(?:\n|$)", text))
         id_number = _match_first(r"(?:id\s*(?:no|number)?|passport\s*(?:no)?|licen[sc]e\s*(?:no)?)\s*[:\-]?\s*([A-Za-z0-9\-]+)", text)
         dob = _match_first(r"(?:date\s*of\s*birth|dob|birth\s*date)\s*[:\-]?\s*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})", text)
         authority = _match_first(r"(?:authority|issued\s*by|country|state)\s*[:\-]?\s*(.+?)(?:\n|$)", text)
 
         field_map.update({
-            "full_name": full_name or "Cardholder Name",
-            "id_number": id_number or "ID-XXXXXX",
+            "full_name": full_name or "",
+            "id_number": id_number or "",
             "date_of_birth": dob or "",
-            "issuing_authority": authority or "Government Authority",
+            "issuing_authority": authority or "",
             "document_date": primary_date or "",
         })
 
@@ -328,15 +373,15 @@ def extract_domain_fields(raw_text: str, document_type: str | None = None) -> di
         notice_number = _match_first(r"(?:order\s*no|notice\s*no|ref\s*no)\s*[:\-]?\s*([A-Za-z0-9\-/]+)", text)
 
         field_map.update({
-            "issuing_authority": authority or "Administrative Office",
-            "subject": subject or "Official Notification",
-            "notice_number": notice_number or "REF-XXXX",
+            "issuing_authority": authority or "",
+            "subject": subject or "",
+            "notice_number": notice_number or "",
             "document_date": primary_date or "",
         })
 
     else:
         field_map.update({
-            "vendor": _match_first(r"(?:vendor|merchant|payee|from)\s*[:\-]?\s*(.+?)(?:\n|$)", text) or "Entity",
+            "vendor": _match_first(r"(?:vendor|merchant|payee|from)\s*[:\-]?\s*(.+?)(?:\n|$)", text) or "",
             "document_date": primary_date or "",
             "total_amount": amounts[-1].replace("$", "").replace("₹", "").strip() if amounts else "",
         })

@@ -160,6 +160,113 @@ function ClassificationBadge({ classification, documentType, showType = true, cl
 
 function LandingPage({ user }) {
   const navigate = useNavigate()
+  const [activeDomain, setActiveDomain] = useState('financial')
+
+  const domainSamples = {
+    financial: {
+      name: 'Vendor Invoice #INV-2026-9810',
+      domain: 'Financial',
+      color: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+      accent: 'emerald',
+      ruleBadge: 'Requires CFO Sign-Off (> $3,000 threshold)',
+      ruleColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+      confidence: '98.2%',
+      summary: 'Commercial cloud infrastructure invoice from Apex Cloud Systems Corp. for quarterly compute and database services.',
+      fields: [
+        { label: 'Invoice No.', value: 'INV-2026-9810' },
+        { label: 'Vendor Name', value: 'Apex Cloud Systems Corp.' },
+        { label: 'Total Amount', value: '$4,250.00 USD' },
+        { label: 'Tax / VAT (10%)', value: '$425.00 USD' },
+        { label: 'Billing Period', value: 'Q3 2026' },
+        { label: 'Due Date', value: 'December 15, 2026' },
+      ],
+      aiQuestion: 'What is the total due and does this require manual approval?',
+      aiAnswer: 'The total invoice amount is $4,250.00 USD due on Dec 15, 2026. Because this exceeds the $3,000 spend threshold rule, DocuBrix has routed it to the Review Queue for CFO sign-off [Page 1, Line 18].',
+    },
+    academic: {
+      name: 'Official Academic Transcript — USAR',
+      domain: 'Academic',
+      color: 'border-blue-500/30 bg-blue-500/10 text-blue-400',
+      accent: 'blue',
+      ruleBadge: 'Auto-Verified (University Registrar Seal Validated)',
+      ruleColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+      confidence: '99.1%',
+      summary: 'Undergraduate academic grade card from Guru Gobind Singh Indraprastha University (USAR East Delhi Campus).',
+      fields: [
+        { label: 'Student Name', value: 'Pranav Bisht' },
+        { label: 'Enrollment No.', value: '02719051723' },
+        { label: 'Programme', value: 'B.Tech. IIOT (Semester VII)' },
+        { label: 'Cumulative CGPA', value: '8.92 / 10.0' },
+        { label: 'Institution', value: 'USAR, GGSIPU' },
+        { label: 'Registrar Seal', value: 'Cryptographically Verified' },
+      ],
+      aiQuestion: 'What is the student\'s CGPA and enrollment status?',
+      aiAnswer: 'Student Pranav Bisht (Enrollment 02719051723) has a cumulative CGPA of 8.92/10.0 in B.Tech IIOT Semester VII. The official seal was validated with 99.1% confidence [Page 1, Table 2].',
+    },
+    medical: {
+      name: 'Specialist Clinical Prescription & Lab Rx',
+      domain: 'Medical',
+      color: 'border-purple-500/30 bg-purple-500/10 text-purple-400',
+      accent: 'purple',
+      ruleBadge: 'Active PHI Shield (Patient Identifiers Redacted)',
+      ruleColor: 'text-purple-400 bg-purple-500/10 border-purple-500/30',
+      confidence: '97.8%',
+      summary: 'Outpatient clinical diagnosis, vitals, and prescribed pharmaceutical regimen from Metro Specialty Clinic.',
+      fields: [
+        { label: 'Prescribing Physician', value: 'Dr. A. K. Sharma, MD' },
+        { label: 'Medical License', value: 'DMC-REG-2018-9941' },
+        { label: 'Prescription Code', value: 'RX-2026-7741' },
+        { label: 'Medication', value: 'Amoxicillin 500mg (TID x 7d)' },
+        { label: 'Patient Identity', value: '[REDACTED - HIPAA Guard]' },
+        { label: 'Storage Mode', value: 'Encrypted Security Vault' },
+      ],
+      aiQuestion: 'What medication is prescribed and are patient details safe?',
+      aiAnswer: 'Prescription RX-2026-7741 authorizes Amoxicillin 500mg, 1 tablet TID for 7 days. All patient PII has been automatically redacted and stored under HIPAA vault rules [Page 1, Box B].',
+    },
+    legal: {
+      name: 'Mutual Non-Disclosure Agreement (NDA)',
+      domain: 'Legal',
+      color: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
+      accent: 'amber',
+      ruleBadge: 'Flagged: Pending Legal Counsel Counter-Signature',
+      ruleColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+      confidence: '96.5%',
+      summary: 'Bilateral confidentiality and intellectual property agreement governing proprietary software disclosures.',
+      fields: [
+        { label: 'Document Type', value: 'Bilateral Mutual NDA' },
+        { label: 'Disclosing Party', value: 'DocuBrix Technologies Ltd.' },
+        { label: 'Receiving Party', value: 'Enterprise Partner LLC' },
+        { label: 'Confidentiality Term', value: '36 Months from Execution' },
+        { label: 'Governing Law', value: 'High Court of Delhi, New Delhi' },
+        { label: 'Signature Audit', value: 'Party 1 Signed, Party 2 Pending' },
+      ],
+      aiQuestion: 'What is the confidentiality term and governing law?',
+      aiAnswer: 'The NDA defines a 3-year (36 months) non-disclosure obligation under the jurisdiction of the High Court of Delhi. Counter-signature by Receiving Party is pending review [Page 3, Section 8].',
+    },
+    administrative: {
+      name: 'Executive Office Circular #2026/CIR-108',
+      domain: 'Administrative',
+      color: 'border-sky-500/30 bg-sky-500/10 text-sky-400',
+      accent: 'sky',
+      ruleBadge: 'Auto-Indexed to Knowledge Base & Broadcast',
+      ruleColor: 'text-sky-400 bg-sky-500/10 border-sky-500/30',
+      confidence: '98.7%',
+      summary: 'Institutional memorandum regarding Minor Project B.Tech evaluation timelines, rubrics, and formatting.',
+      fields: [
+        { label: 'Circular Ref', value: 'USAR/2026/CIR-108' },
+        { label: 'Issuing Authority', value: 'Office of the Dean, USAR' },
+        { label: 'Target Audience', value: 'Faculty, Evaluators & Students' },
+        { label: 'Subject Matter', value: 'ARP 455 Evaluation Protocol' },
+        { label: 'Effective Date', value: 'Immediate Effect (Nov 2026)' },
+        { label: 'Distribution', value: 'Campus Intranet Broadcast' },
+      ],
+      aiQuestion: 'Who issued this circular and what are the main deadlines?',
+      aiAnswer: 'Circular USAR/2026/CIR-108 was issued by the Dean Office, USAR, mandating evaluation standards and minimum 30-page spiral-bound report submissions for ARP 455 [Page 1, Item 4].',
+    },
+  }
+
+  const curSample = domainSamples[activeDomain]
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white">
       {/* Top Navbar */}
@@ -169,7 +276,9 @@ function LandingPage({ user }) {
             <Link to="/" className="flex items-center gap-2">
               <img src="/docubrix-logo.png" alt="DocuBrix" className="h-9 w-auto object-contain rounded-lg bg-white/95 px-2.5 py-1 shadow-sm" />
             </Link>
-            <span className="rounded bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-400 border border-blue-500/20">AI Lifecycle &amp; Workflows</span>
+            <span className="rounded bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-400 border border-blue-500/20">
+              AI Lifecycle &amp; Workflows
+            </span>
           </div>
           <div className="flex items-center gap-3">
             {user ? (
@@ -190,102 +299,301 @@ function LandingPage({ user }) {
         </div>
       </header>
 
-      {/* Hero Section */}
+      {/* Main Content */}
       <main className="flex-1">
-        <section className="relative overflow-hidden pt-20 pb-24 px-6 max-w-7xl mx-auto text-center">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-blue-600/15 blur-[120px] rounded-full pointer-events-none" />
+        {/* 1. Hero Section */}
+        <section className="relative overflow-hidden pt-20 pb-20 px-6 max-w-7xl mx-auto text-center">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[320px] bg-blue-600/15 blur-[130px] rounded-full pointer-events-none" />
           
-          <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-1.5 text-xs font-semibold text-blue-400 mb-8 backdrop-blur">
-            <Zap className="h-3.5 w-3.5 text-amber-400" />
-            <span>Autonomous Multi-Domain Document &amp; Workflow Intelligence</span>
+          <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-1.5 text-xs font-semibold text-blue-400 mb-6 backdrop-blur">
+            <Sparkles className="h-3.5 w-3.5 text-blue-300" />
+            <span>Effortless Multi-Domain Document Understanding &amp; Governance</span>
           </div>
 
           <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-tight sm:leading-none mb-6">
-            Intelligent Document Lifecycle. <br className="hidden sm:inline" />
+            Intelligent Document Automation. <br className="hidden sm:inline" />
             <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-sky-400 bg-clip-text text-transparent">
-              Powered by Workflow Automation.
+              Made Effortless for Everyone.
             </span>
           </h1>
 
-          <p className="max-w-2xl mx-auto text-base sm:text-lg text-slate-400 mb-10 leading-relaxed">
-            Eliminate document silos, manual data entry, and untracked compliance risks. DocuBrix audits, classifies, and automates documents across Academic, Legal, Medical, Administrative, and Financial domains with deterministic rule gates.
+          <p className="max-w-2xl mx-auto text-base sm:text-lg text-slate-300 mb-10 leading-relaxed font-normal">
+            Stop drowning in invoices, transcripts, medical slips, and contracts. DocuBrix reads messy documents, extracts key fields with 98%+ precision, triggers automated compliance checks, and lets you ask questions with zero hallucinations.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-14">
-            <Button size="lg" onClick={() => navigate(user ? '/dashboard' : '/login')} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-xl font-semibold shadow-xl shadow-blue-600/25 flex items-center gap-2">
-              Launch Workspace <ArrowRight className="h-5 w-5" />
+            <Button size="lg" onClick={() => navigate(user ? '/dashboard' : '/login')} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3.5 rounded-xl font-semibold shadow-xl shadow-blue-600/25 flex items-center gap-2 text-base">
+              Launch Workspace Free <ArrowRight className="h-5 w-5" />
             </Button>
-            <Button size="lg" variant="outline" onClick={() => navigate(user ? '/automation' : '/login')} className="border-slate-800 bg-slate-900/60 hover:bg-slate-800 text-slate-200 px-7 py-3 rounded-xl font-medium">
-              Explore Active Rules
+            <Button size="lg" variant="outline" onClick={() => {
+              const el = document.getElementById('interactive-demo')
+              if (el) el.scrollIntoView({ behavior: 'smooth' })
+            }} className="border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-slate-200 px-7 py-3.5 rounded-xl font-medium text-base">
+              See Live Interactive Demo
             </Button>
           </div>
 
-          {/* Metric Sentinel Pills */}
+          {/* User Value Metric Sentinel Badges */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-4xl mx-auto border border-slate-800/80 bg-slate-900/40 backdrop-blur rounded-2xl p-4 text-left">
             <div className="p-3 border-r border-slate-800/60">
               <div className="text-2xl font-bold text-white">5 Domains</div>
-              <div className="text-xs text-slate-400">Academic, Legal, Medical, Admin, Financial</div>
+              <div className="text-xs text-slate-400">Financial, Academic, Medical, Legal, Admin</div>
             </div>
             <div className="p-3 border-r border-slate-800/60">
-              <div className="text-2xl font-bold text-emerald-400">100% Verified</div>
-              <div className="text-xs text-slate-400">Deterministic Confidence Scoring</div>
+              <div className="text-2xl font-bold text-emerald-400">98.6% Accuracy</div>
+              <div className="text-xs text-slate-400">Multi-Signal Confidence Scoring</div>
             </div>
             <div className="p-3 border-r border-slate-800/60">
-              <div className="text-2xl font-bold text-amber-400">6 Active Rules</div>
-              <div className="text-xs text-slate-400">Spend Gate, PHI Shield &amp; Audits</div>
+              <div className="text-2xl font-bold text-amber-400">Automated Gates</div>
+              <div className="text-xs text-slate-400">Spend Limits, PHI Vault &amp; Approvals</div>
             </div>
             <div className="p-3">
-              <div className="text-2xl font-bold text-purple-400">RAG Grounded</div>
-              <div className="text-xs text-slate-400">Conversational AI with Citations</div>
+              <div className="text-2xl font-bold text-purple-400">Grounded RAG</div>
+              <div className="text-xs text-slate-400">Exact Page &amp; Line Citations</div>
             </div>
           </div>
         </section>
 
-        {/* Feature Grid Section */}
+        {/* 2. Interactive Product Feature Showcase (HomePilot Style) */}
+        <section id="interactive-demo" className="py-16 border-t border-slate-800/60 bg-slate-900/20">
+          <div className="max-w-6xl mx-auto px-6">
+            <div className="text-center max-w-2xl mx-auto mb-10">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-semibold mb-3 border border-blue-500/20">
+                <FileText className="h-3.5 w-3.5" />
+                <span>Interactive Live Demo</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">See How DocuBrix Understands Any Document</h2>
+              <p className="text-sm text-slate-400">Select any document type below to see how DocuBrix extracts structured data, runs rule checks, and answers questions in real-time.</p>
+            </div>
+
+            {/* Domain Selector Chips */}
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
+              {[
+                { id: 'financial', label: 'Financial (Invoices)', icon: '🧾' },
+                { id: 'academic', label: 'Academic (Transcripts)', icon: '🎓' },
+                { id: 'medical', label: 'Medical (Prescriptions)', icon: '🩺' },
+                { id: 'legal', label: 'Legal (NDAs / Contracts)', icon: '⚖️' },
+                { id: 'administrative', label: 'Administrative (Notices)', icon: '🏛️' },
+              ].map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => setActiveDomain(d.id)}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 ${
+                    activeDomain === d.id
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25 border border-blue-500'
+                      : 'bg-slate-900/70 text-slate-400 border border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  <span>{d.icon}</span>
+                  <span>{d.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Interactive Document Preview Card */}
+            <div className="border border-slate-800 bg-slate-900/60 backdrop-blur rounded-2xl p-6 sm:p-8 shadow-2xl">
+              <div className="flex flex-col md:flex-row items-start justify-between gap-4 pb-6 border-b border-slate-800">
+                <div>
+                  <div className="flex items-center gap-3 mb-1.5">
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${curSample.color}`}>
+                      {curSample.domain}
+                    </span>
+                    <span className="text-xs text-slate-400">Confidence: <strong className="text-emerald-400">{curSample.confidence}</strong></span>
+                  </div>
+                  <h3 className="text-xl font-bold text-white">{curSample.name}</h3>
+                  <p className="text-xs text-slate-400 mt-1 max-w-xl">{curSample.summary}</p>
+                </div>
+                <div className={`px-3.5 py-2 rounded-xl text-xs font-semibold border flex items-center gap-2 ${curSample.ruleColor}`}>
+                  <Zap className="h-4 w-4 shrink-0" />
+                  <span>{curSample.ruleBadge}</span>
+                </div>
+              </div>
+
+              {/* Parsed Fields Grid */}
+              <div className="mt-6">
+                <div className="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-3 flex items-center gap-2">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-400" />
+                  <span>Extracted Structured Key-Value Entities</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {curSample.fields.map((f, i) => (
+                    <div key={i} className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3">
+                      <div className="text-[11px] text-slate-400 font-medium">{f.label}</div>
+                      <div className="text-sm font-semibold text-slate-100 mt-0.5 truncate">{f.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Conversational Grounded AI Dialogue Preview */}
+              <div className="mt-6 pt-6 border-t border-slate-800/80">
+                <div className="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-3 flex items-center gap-2">
+                  <Bot className="h-3.5 w-3.5 text-purple-400" />
+                  <span>Grounded AI Assistant Q&amp;A (Zero Hallucination with Citations)</span>
+                </div>
+                <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-4 space-y-3">
+                  <div className="flex items-start gap-2.5 text-xs">
+                    <span className="font-bold text-slate-400 shrink-0">User:</span>
+                    <span className="text-slate-300 italic">&ldquo;{curSample.aiQuestion}&rdquo;</span>
+                  </div>
+                  <div className="flex items-start gap-2.5 text-xs bg-purple-950/20 border border-purple-500/20 rounded-lg p-3">
+                    <span className="font-bold text-purple-400 shrink-0">DocuBrix:</span>
+                    <span className="text-slate-200">{curSample.aiAnswer}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 3. "How It Works" 3-Step Visual Process */}
+        <section className="py-20 border-t border-slate-800/60 bg-slate-950">
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="text-center max-w-2xl mx-auto mb-16">
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">How DocuBrix Works for You</h2>
+              <p className="text-sm text-slate-400">From raw messy file to fully verified actions in three automated steps.</p>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-8 relative">
+              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 relative">
+                <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold text-base mb-4 border border-blue-500/20">
+                  1
+                </div>
+                <h3 className="font-semibold text-lg text-white mb-2">Drop Any File</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Upload invoices, student transcripts, medical slips, or contracts in PDF, PNG, or JPG formats. DocuBrix cleans up noise and runs optical character recognition automatically.
+                </p>
+              </div>
+
+              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 relative">
+                <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold text-base mb-4 border border-amber-500/20">
+                  2
+                </div>
+                <h3 className="font-semibold text-lg text-white mb-2">Instant Understanding &amp; Rules</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Multi-signal heuristics classify your document, extract entities, compute confidence scores, and evaluate active workflow rules like spend limits and HIPAA privacy safeguards.
+                </p>
+              </div>
+
+              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 relative">
+                <div className="h-10 w-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center font-bold text-base mb-4 border border-purple-500/20">
+                  3
+                </div>
+                <h3 className="font-semibold text-lg text-white mb-2">Review, Export &amp; Chat</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Approve flagged files in the Review Queue, export clean CSV audit trails for compliance auditors, or query your document corpus with our citation-grounded AI assistant.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 4. Core User Benefits Grid */}
         <section className="py-20 border-t border-slate-800/60 bg-slate-900/30">
           <div className="max-w-7xl mx-auto px-6">
             <div className="text-center max-w-2xl mx-auto mb-16">
-              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">Core Platform Capabilities</h2>
-              <p className="text-sm text-slate-400">Engineered from ground up with enterprise multi-domain ingestion, OCR layout parsing, and stateful human-in-the-loop workflow governance.</p>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">Core User Capabilities</h2>
+              <p className="text-sm text-slate-400">Everything modern businesses, educational institutes, and healthcare organizations need in one clean workspace.</p>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
                 <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mb-4">
                   <FileText className="h-5 w-5" />
                 </div>
-                <h3 className="font-semibold text-lg text-white mb-2">Multi-Domain Classification</h3>
-                <p className="text-sm text-slate-400 leading-relaxed">Zero-shot and heuristic classification across 12+ document types including transcripts, legal contracts, prescriptions, and invoices.</p>
+                <h3 className="font-semibold text-base text-white mb-2">Zero-Manual Data Entry</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">Instantly parses complex tables, totals, invoice IDs, and signatures with multi-signal confidence metrics.</p>
               </div>
 
               <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
                 <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center mb-4">
                   <Zap className="h-5 w-5" />
                 </div>
-                <h3 className="font-semibold text-lg text-white mb-2">Workflow Automation Engine</h3>
-                <p className="text-sm text-slate-400 leading-relaxed">Configurable decision engine with spend review limits, low-confidence gates, academic verification, and HIPAA/PHI security shields.</p>
+                <h3 className="font-semibold text-base text-white mb-2">Automated Policy Rules</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">Set custom rules: flag high-value spend, enforce low-confidence human review, and protect confidential records.</p>
               </div>
 
               <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
                 <div className="h-10 w-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mb-4">
                   <Bot className="h-5 w-5" />
                 </div>
-                <h3 className="font-semibold text-lg text-white mb-2">Grounded RAG Assistant</h3>
-                <p className="text-sm text-slate-400 leading-relaxed">Conversational intelligence grounded in deterministic document vector chunks with verbatim citations and zero hallucinations.</p>
+                <h3 className="font-semibold text-base text-white mb-2">Grounded AI Chat</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">Interrogate your document repository in plain English. Every response includes page and paragraph evidence citations.</p>
+              </div>
+
+              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
+                <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-4">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <h3 className="font-semibold text-base text-white mb-2">Audit-Ready Trail (CSV)</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">Track every review decision, timestamp, and status change. Export full CSV audit logs in a single click.</p>
               </div>
             </div>
           </div>
         </section>
+
+        {/* 5. Enterprise Architecture & Tech Stack (Placed below features, as Dhruv recommended) */}
+        <section className="py-20 border-t border-slate-800/60 bg-slate-950">
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="text-center max-w-2xl mx-auto mb-16">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-semibold mb-3 border border-slate-700">
+                <Sliders className="h-3.5 w-3.5 text-blue-400" />
+                <span>Under the Hood</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">Enterprise-Grade Technical Architecture</h2>
+              <p className="text-sm text-slate-400">Engineered with modern decoupled services, sub-second latency, cryptographic user tenancy, and scalable cloud hosting.</p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-left">
+              <div className="p-5 rounded-xl border border-slate-800 bg-slate-900/40">
+                <div className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-1">Frontend Layer</div>
+                <div className="font-semibold text-white text-sm mb-1">React 18 + Tailwind CSS</div>
+                <p className="text-xs text-slate-400">Vite-powered SPA, Lucide UI icons, responsive multi-view workspace with live telemetry charts.</p>
+              </div>
+              <div className="p-5 rounded-xl border border-slate-800 bg-slate-900/40">
+                <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">API &amp; Backend</div>
+                <div className="font-semibold text-white text-sm mb-1">FastAPI + Python 3.11</div>
+                <p className="text-xs text-slate-400">Asynchronous REST endpoints, SQLAlchemy ORM, deterministic rule engine, and Pytest coverage (90/90 tests).</p>
+              </div>
+              <div className="p-5 rounded-xl border border-slate-800 bg-slate-900/40">
+                <div className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-1">AI &amp; Vector Index</div>
+                <div className="font-semibold text-white text-sm mb-1">ChromaDB + Gemini 2.5</div>
+                <p className="text-xs text-slate-400">Dense sentence embeddings, chunk-level vector search with fail-safe fallback and verbatim citations.</p>
+              </div>
+              <div className="p-5 rounded-xl border border-slate-800 bg-slate-900/40">
+                <div className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-1">Cloud Infrastructure</div>
+                <div className="font-semibold text-white text-sm mb-1">Render PaaS Cloud Deploy</div>
+                <p className="text-xs text-slate-400">Automated Git deployment pipelines, PBKDF2-HMAC password encryption, and multi-tenant isolation.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 6. CTA Banner */}
+        <section className="py-16 border-t border-slate-800/60 bg-gradient-to-b from-slate-950 to-blue-950/30 text-center px-6">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">Ready to Automate Your Document Workflow?</h2>
+            <p className="text-slate-300 text-sm sm:text-base mb-8 max-w-xl mx-auto">Experience the full power of autonomous document classification, spend safeguard rules, and citation-grounded AI.</p>
+            <Button size="lg" onClick={() => navigate(user ? '/dashboard' : '/login')} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3.5 rounded-xl font-semibold shadow-xl shadow-blue-600/30 text-base">
+              Launch Workspace Now <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+          </div>
+        </section>
       </main>
 
-      {/* Product Footer */}
-      <footer className="border-t border-slate-800/80 py-8 px-6 text-center text-xs text-slate-500">
+      {/* 7. Product Footer */}
+      <footer className="border-t border-slate-800/80 py-8 px-6 text-xs text-slate-500 bg-slate-950">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <img src="/docubrix-logo.png" alt="DocuBrix" className="h-6 w-auto object-contain rounded bg-white/95 px-1.5 py-0.5" />
             <span className="font-semibold text-slate-300">DocuBrix</span>
             <span className="text-slate-600">|</span>
-            <span className="text-slate-400">Intelligent Document Lifecycle &amp; Workflows</span>
+            <span className="text-slate-400">B.Tech. Minor Project (ARP 455) &mdash; USAR, GGSIPU</span>
+          </div>
+          <div className="flex items-center gap-4 text-slate-400">
+            <span>Student: <strong>Pranav Bisht</strong> (02719051723)</span>
+            <span>&bull;</span>
+            <span>Supervisor: <strong>Dr. Bhanu Prakash Joshi</strong></span>
           </div>
           <p className="text-slate-500">&copy; 2026 DocuBrix. All rights reserved.</p>
         </div>

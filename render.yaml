@@ -27,7 +27,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        fromService:
-          type: web
-          name: docubrix-api
-          property: host
+        value: https://docubrix-api-jhtg.onrender.com

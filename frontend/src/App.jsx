@@ -256,7 +256,7 @@ function ProtectedLayout({ user, children, mobileOpen, setMobileOpen, onLogout }
               >
                 <span className="flex items-center gap-2">
                   <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white text-slate-500 shadow-sm">
-                    {item.path === '/dashboard' ? <LayoutDashboard className="h-3.5 w-3.5" /> : item.path === '/chat' ? <Bot className="h-3.5 w-3.5 text-blue-600" /> : item.comingSoon ? <Sparkles className="h-3.5 w-3.5" /> : <FolderOpen className="h-3.5 w-3.5" />}
+                    {item.path === '/dashboard' ? <LayoutDashboard className="h-3.5 w-3.5" /> : item.path === '/chat' ? <Bot className="h-3.5 w-3.5 text-blue-600" /> : item.path === '/automation' ? <Zap className="h-3.5 w-3.5 text-amber-500" /> : item.comingSoon ? <Sparkles className="h-3.5 w-3.5" /> : <FolderOpen className="h-3.5 w-3.5" />}
                   </span>
                   {item.label}
                 </span>

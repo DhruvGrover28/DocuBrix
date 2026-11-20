@@ -16,8 +16,9 @@ services:
         generateValue: true
 
   # 2. React + Vite Frontend (Free Fast Static Site with SPA routing)
-  - type: static
+  - type: web
     name: docubrix-frontend
+    runtime: static
     plan: free
     buildCommand: npm --prefix frontend install && npm --prefix frontend run build
     staticPublishPath: ./frontend/dist

@@ -142,12 +142,16 @@ def delete_workflow_rule(rule_id: str) -> bool:
     return len(_ACTIVE_RULES) < initial_len
 
 
-def get_workflow_logs(limit: int = 50) -> list[dict[str, Any]]:
-    return sorted(_EXECUTION_LOGS, key=lambda x: x["timestamp"], reverse=True)[:limit]
+def get_workflow_logs(limit: int = 50, owner_id: str | None = None) -> list[dict[str, Any]]:
+    logs = _EXECUTION_LOGS
+    if owner_id:
+        logs = [l for l in logs if l.get("owner_id") == owner_id]
+    return sorted(logs, key=lambda x: x["timestamp"], reverse=True)[:limit]
 
 
 def evaluate_document_workflows(document: dict[str, Any]) -> dict[str, Any]:
     doc_id = document.get("document_id") or document.get("id") or str(uuid.uuid4())
+    owner_id = document.get("owner_id")
     filename = document.get("filename", "Unknown Document")
     doc_type = document.get("document_type", "unknown")
     category = document.get("category") or (document.get("extracted_fields") or {}).get("category", "General")
@@ -220,6 +224,7 @@ def evaluate_document_workflows(document: dict[str, Any]) -> dict[str, Any]:
     log_entry = {
         "id": f"log-{uuid.uuid4().hex[:8]}",
         "document_id": doc_id,
+        "owner_id": owner_id,
         "filename": filename,
         "document_type": doc_type,
         "category": category,

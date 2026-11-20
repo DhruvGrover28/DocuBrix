@@ -1,5 +1,5 @@
 services:
-  # 1. FastAPI Backend Service (Docker with Tesseract OCR & SQLite)
+  # 1. FastAPI Backend Service (Docker with Tesseract OCR & Neon PostgreSQL)
   - type: web
     name: docubrix-api
     runtime: docker
@@ -14,6 +14,10 @@ services:
         value: production
       - key: AUTH_SECRET
         generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
 
   # 2. React + Vite Frontend (Free Fast Static Site with SPA routing)
   - type: web
@@ -27,4 +31,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        value: https://docubrix-api-jhtg.onrender.com
+        value: https://docubrix-api.onrender.com

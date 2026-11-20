@@ -630,6 +630,7 @@ def upload_document(
     # Workflow Automation Evaluation
     workflow_eval = evaluate_document_workflows({
         "filename": filename,
+        "owner_id": user.id,
         "document_type": document_type,
         "category": category,
         "confidence": confidence,
@@ -859,7 +860,7 @@ def list_workflow_rules(user: User = Depends(get_current_user)) -> dict[str, Any
 
 
 @app.post("/workflows/rules")
-def create_workflow_rule(payload: dict[str, Any], user: User = Depends(get_current_user)) -> dict[str, Any]:
+def create_workflow_rule(payload: dict[str, Any], user: User = Depends(require_admin)) -> dict[str, Any]:
     name = str(payload.get("name") or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Rule name is required.")
@@ -868,7 +869,7 @@ def create_workflow_rule(payload: dict[str, Any], user: User = Depends(get_curre
 
 
 @app.patch("/workflows/rules/{rule_id}")
-def modify_workflow_rule(rule_id: str, payload: dict[str, Any], user: User = Depends(get_current_user)) -> dict[str, Any]:
+def modify_workflow_rule(rule_id: str, payload: dict[str, Any], user: User = Depends(require_admin)) -> dict[str, Any]:
     rule = update_workflow_rule(rule_id, payload)
     if not rule:
         raise HTTPException(status_code=404, detail="Workflow rule not found.")
@@ -876,7 +877,7 @@ def modify_workflow_rule(rule_id: str, payload: dict[str, Any], user: User = Dep
 
 
 @app.delete("/workflows/rules/{rule_id}")
-def remove_workflow_rule(rule_id: str, user: User = Depends(get_current_user)) -> dict[str, Any]:
+def remove_workflow_rule(rule_id: str, user: User = Depends(require_admin)) -> dict[str, Any]:
     success = delete_workflow_rule(rule_id)
     if not success:
         raise HTTPException(status_code=404, detail="Workflow rule not found.")
@@ -885,7 +886,42 @@ def remove_workflow_rule(rule_id: str, user: User = Depends(get_current_user)) -
 
 @app.get("/workflows/logs")
 def list_workflow_logs(limit: int = Query(default=50, ge=1, le=200), user: User = Depends(get_current_user)) -> dict[str, Any]:
-    return {"logs": get_workflow_logs(limit=limit)}
+    logs = []
+    if SessionLocal is not None:
+        with SessionLocal() as session:
+            docs = (
+                document_query(session, user)
+                .order_by(Document.upload_time.desc())
+                .limit(limit)
+                .all()
+            )
+            for doc in docs:
+                extracted = doc.extracted_json or {}
+                wf = extracted.get("workflow") or {}
+                if wf:
+                    triggered_raw = wf.get("triggered_rules", [])
+                    triggered_names = [
+                        r.get("rule_name", "") if isinstance(r, dict) else str(r)
+                        for r in triggered_raw
+                    ]
+                    logs.append({
+                        "id": wf.get("log_id") or f"log-{doc.id[:8]}",
+                        "document_id": doc.id,
+                        "owner_id": doc.owner_id,
+                        "filename": doc.filename,
+                        "document_type": doc.document_type,
+                        "category": extracted.get("category") or DOCUMENT_CATEGORY_MAP.get(doc.document_type, "General"),
+                        "confidence": (doc.confidence_scores or {}).get("overall", 0.0),
+                        "triggered_rules_count": len(triggered_names),
+                        "triggered_rules": triggered_names,
+                        "resulting_status": doc.status,
+                        "tags": wf.get("applied_tags", []),
+                        "alerts": wf.get("alerts", []),
+                        "timestamp": doc.upload_time.isoformat() if doc.upload_time else datetime.utcnow().isoformat(),
+                    })
+    if not logs:
+        logs = get_workflow_logs(limit=limit, owner_id=user.id if user.role != "admin" else None)
+    return {"logs": logs}
 
 
 @app.post("/workflows/evaluate/{document_id}")
@@ -898,6 +934,7 @@ def evaluate_document_workflow(document_id: str, user: User = Depends(get_curren
         extracted_json = document.extracted_json or {}
         workflow_eval = evaluate_document_workflows({
             "document_id": document.id,
+            "owner_id": document.owner_id,
             "filename": document.filename,
             "document_type": document.document_type,
             "category": extracted_json.get("category") or DOCUMENT_CATEGORY_MAP.get(document.document_type, "General"),
@@ -940,6 +977,12 @@ def execute_queue_action(document_id: str, payload: dict[str, Any], user: User =
     valid_actions = {"approve", "reject", "flag", "reprocess"}
     if action not in valid_actions:
         raise HTTPException(status_code=400, detail=f"Invalid action. Expected one of: {', '.join(valid_actions)}")
+
+    if action in ("approve", "reject") and user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Administrator access is required to approve or reject documents in the review queue.",
+        )
 
     with SessionLocal() as session:
         document = document_query(session, user).filter(Document.id == document_id).first()

@@ -31,6 +31,12 @@ APP_NAME = os.getenv("APP_NAME", "DocuBrix")
 APP_VERSION = os.getenv("APP_VERSION", "0.1.0")
 APP_ENVIRONMENT = os.getenv("APP_ENVIRONMENT", "development")
 DEFAULT_SQLITE_URL = f"sqlite:///{(BASE_DIR / 'docubrix.db').as_posix()}"
-DATABASE_URL = normalize_database_url(os.getenv("DATABASE_URL")) or DEFAULT_SQLITE_URL
+raw_db_url = normalize_database_url(os.getenv("DATABASE_URL"))
+if raw_db_url:
+    DATABASE_URL = raw_db_url
+elif APP_ENVIRONMENT == "production":
+    DATABASE_URL = None
+else:
+    DATABASE_URL = DEFAULT_SQLITE_URL
 AUTH_SECRET = os.getenv("AUTH_SECRET", "docubrix-development-auth-secret-change-me")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().lower()

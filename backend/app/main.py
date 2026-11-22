@@ -58,6 +58,7 @@ from backend.app.services.knowledge import (
     is_conversational_greeting,
     is_embedding_configured,
     is_llm_configured,
+    is_summarization_request,
     query_terms,
     rank_chunks_by_relevance,
 )
@@ -1273,6 +1274,33 @@ def send_chat_message(conversation_id: str, payload: dict[str, Any], user: User 
         session.add(user_msg)
         session.flush()
 
+        # Instant response for casual greetings & conversational pleasantries
+        if is_conversational_greeting(content):
+            greeting_answer = (
+                "Hello! How can I help you today with your documents? "
+                "You can ask me to summarize an uploaded document, explain specific clauses or details, "
+                "verify invoice amounts, or search across your library."
+            )
+            assistant_msg = ChatMessage(
+                conversation_id=conv.id,
+                role="assistant",
+                content=greeting_answer,
+                sources=[],
+            )
+            session.add(assistant_msg)
+            conv.updated_at = datetime.utcnow()
+            session.commit()
+            session.refresh(assistant_msg)
+            session.refresh(user_msg)
+            session.refresh(conv)
+            return {
+                "conversation_id": conv.id,
+                "user_message": serialize_chat_message(user_msg),
+                "assistant_message": serialize_chat_message(assistant_msg),
+                "sources": [],
+                "conversation": serialize_conversation(conv),
+            }
+
         # Multi-turn context: fetch previous messages in this conversation (window of last 6)
         past_messages = (
             session.query(ChatMessage)
@@ -1293,15 +1321,47 @@ def send_chat_message(conversation_id: str, payload: dict[str, Any], user: User 
         user_docs = session.query(Document.id, Document.filename).filter(Document.owner_id == user.id).all()
         filename_map = {str(d.id): d.filename for d in user_docs}
 
-        # Rank relevant chunks across the user's documents
-        sources = rank_chunks_by_relevance(content, candidate_chunks, filename_map=filename_map, top_k=5)
+        # If user asks for document summary/overview:
+        if is_summarization_request(content):
+            target_doc_id = conv.document_id
+            if not target_doc_id:
+                latest_doc = (
+                    session.query(Document)
+                    .filter(Document.owner_id == user.id)
+                    .order_by(Document.upload_time.desc())
+                    .first()
+                )
+                if latest_doc:
+                    target_doc_id = latest_doc.id
 
-        # Generate grounded response with Gemini or intelligent fallback
-        try:
-            if is_conversational_greeting(content) and not sources:
-                answer = generate_extractive_fallback(content, sources)
+            if target_doc_id:
+                ordered_chunks = (
+                    session.query(DocumentChunk)
+                    .filter(DocumentChunk.document_id == target_doc_id)
+                    .order_by(DocumentChunk.chunk_index.asc())
+                    .limit(8)
+                    .all()
+                )
+                sources = [
+                    {
+                        "document_id": getattr(c, "document_id", None),
+                        "filename": filename_map.get(str(getattr(c, "document_id", "")), "Document"),
+                        "chunk_index": getattr(c, "chunk_index", 0),
+                        "content": getattr(c, "content", ""),
+                        "relevance_score": 1.0,
+                        "retrieval_method": "summary_anchor",
+                    }
+                    for c in ordered_chunks
+                ]
             else:
-                answer = generate_chat_answer(content, sources, chat_history=chat_history)
+                sources = []
+        else:
+            # Rank relevant chunks across the user's documents
+            sources = rank_chunks_by_relevance(content, candidate_chunks, filename_map=filename_map, top_k=5)
+
+        # Generate grounded, comprehensive response with Gemini or intelligent fallback
+        try:
+            answer = generate_chat_answer(content, sources, chat_history=chat_history)
         except RuntimeError as exc:
             logger.warning(
                 "[Gemini Diagnostic] Assistant generation failed for conversation %s: %s. Using grounded extractive fallback.",

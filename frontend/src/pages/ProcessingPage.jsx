@@ -71,7 +71,7 @@ export default function ProcessingPage() {
   }
 
   return (
-    <>
+    <div className="page-enter">
       <PageHeader
         title="Intelligent Document Processing"
         subtitle="Upload or test documents across Financial, Academic, Medical, Legal, or Administrative domains with automated OCR, ML classification, field extraction, and workflow validation."
@@ -120,24 +120,25 @@ export default function ProcessingPage() {
       <Card>
         <CardContent className="p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-end">
-            <div className="flex-1 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5">
+            <div className="relative overflow-hidden flex-1 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-5">
+              {uploading && <div className="scan-line" />}
               <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-blue-100 p-2 text-blue-700">
+                <div className="rounded-xl bg-blue-100 dark:bg-blue-900/50 p-2 text-blue-700 dark:text-blue-300">
                   <UploadCloud className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="font-medium text-slate-900">Upload document for intelligent analysis</div>
-                  <div className="text-sm text-slate-500">PDF, PNG, JPG, JPEG, TXT (Up to 25MB)</div>
+                  <div className="font-medium text-slate-900 dark:text-slate-100">Upload document for intelligent analysis</div>
+                  <div className="text-sm text-slate-500 dark:text-slate-400">PDF, PNG, JPG, JPEG, TXT (Up to 25MB)</div>
                 </div>
               </div>
               <input
                 type="file"
-                className="mt-4 block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
+                className="mt-4 block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-4 file:rounded-xl file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-primary/90 cursor-pointer"
                 accept=".pdf,.png,.jpg,.jpeg,.txt"
                 onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
               />
             </div>
-            <Button onClick={handleUpload} disabled={!selectedFile || uploading}>
+            <Button onClick={handleUpload} disabled={!selectedFile || uploading} className="active:scale-95 transition-transform">
               {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Analyzing Document...</> : 'Process document'}
             </Button>
           </div>
@@ -265,6 +266,6 @@ export default function ProcessingPage() {
           </Card>
         </div>
       )}
-    </>
+    </div>
   )
 }

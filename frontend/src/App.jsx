@@ -23,6 +23,7 @@ import {
   LogOut,
   Menu,
   MessageSquare,
+  Moon,
   MoreHorizontal,
   Plus,
   RefreshCw,
@@ -32,6 +33,7 @@ import {
   ShieldCheck,
   Sliders,
   Sparkles,
+  Sun,
   ToggleLeft,
   ToggleRight,
   Trash2,
@@ -106,457 +108,37 @@ import WorkflowAutomationPage from './pages/WorkflowAutomationPage'
 import SystemStatusPage from './pages/SystemStatusPage'
 import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
-
-function LandingPage({ user }) {
-  const navigate = useNavigate()
-  const [activeDomain, setActiveDomain] = useState('financial')
-
-  const domainSamples = {
-    financial: {
-      name: 'Tax Invoice #INV-2026-9810',
-      domain: 'Financial',
-      color: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
-      accent: 'emerald',
-      ruleBadge: 'Requires Financial Sign-Off (> ₹1,00,000 threshold)',
-      ruleColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
-      confidence: '98.2%',
-      summary: 'Commercial cloud infrastructure invoice from Apex Cloud Systems India Pvt. Ltd. (Connaught Place, New Delhi).',
-      fields: [
-        { label: 'Invoice No.', value: 'INV-2026-9810' },
-        { label: 'Vendor Name', value: 'Apex Cloud Systems India Pvt. Ltd.' },
-        { label: 'Total Amount', value: '₹3,45,000.00' },
-        { label: 'GST (18% IGST)', value: '₹52,627.00' },
-        { label: 'GSTIN (Delhi)', value: '07AAACD1234A1Z5' },
-        { label: 'Due Date', value: 'December 15, 2026' },
-      ],
-      aiQuestion: 'What is the total due and does this require manual approval?',
-      aiAnswer: 'The total invoice amount is ₹3,45,000.00 INR due on Dec 15, 2026. Because this exceeds the ₹1,00,000 spend threshold rule, DocuBrix has routed it to the Review Queue for financial supervisor sign-off [Page 1, Line 18].',
-    },
-    academic: {
-      name: 'Official Academic Transcript & Grade Report',
-      domain: 'Academic',
-      color: 'border-blue-500/30 bg-blue-500/10 text-blue-400',
-      accent: 'blue',
-      ruleBadge: 'Auto-Verified (University Registrar Seal Validated)',
-      ruleColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
-      confidence: '99.1%',
-      summary: 'Undergraduate academic grade card and verified cumulative performance transcript from National Institute of Technology, New Delhi.',
-      fields: [
-        { label: 'Student Name', value: 'Alex Morgan' },
-        { label: 'Enrollment No.', value: 'ENR-2024-88410' },
-        { label: 'Programme', value: 'B.Tech. Computer Science (Semester VII)' },
-        { label: 'Cumulative CGPA', value: '9.15 / 10.0' },
-        { label: 'Institution', value: 'National Institute of Technology, Delhi' },
-        { label: 'Registrar Seal', value: 'Cryptographically Verified' },
-      ],
-      aiQuestion: 'What is the student\'s CGPA and enrollment status?',
-      aiAnswer: 'Student Alex Morgan (Enrollment ENR-2024-88410) has a cumulative CGPA of 9.15/10.0 in B.Tech Computer Science Semester VII. The official seal was validated with 99.1% confidence [Page 1, Table 2].',
-    },
-    medical: {
-      name: 'Specialist Clinical Prescription & Lab Rx',
-      domain: 'Medical',
-      color: 'border-purple-500/30 bg-purple-500/10 text-purple-400',
-      accent: 'purple',
-      ruleBadge: 'Active PHI Shield (Patient Identifiers Redacted)',
-      ruleColor: 'text-purple-400 bg-purple-500/10 border-purple-500/30',
-      confidence: '97.8%',
-      summary: 'Outpatient clinical diagnosis, vitals, and prescribed pharmaceutical regimen from Apollo Specialty Hospital, Sarita Vihar, New Delhi.',
-      fields: [
-        { label: 'Prescribing Physician', value: 'Dr. A. K. Sharma, MD' },
-        { label: 'Medical Council Reg.', value: 'DMC-REG-2018-9941 (Delhi)' },
-        { label: 'Prescription Code', value: 'RX-2026-7741' },
-        { label: 'Medication', value: 'Amoxicillin 500mg (TID x 7d)' },
-        { label: 'Patient Identity', value: '[REDACTED - HIPAA Guard]' },
-        { label: 'Hospital Facility', value: 'Sarita Vihar, New Delhi - 110076' },
-      ],
-      aiQuestion: 'What medication is prescribed and are patient details safe?',
-      aiAnswer: 'Prescription RX-2026-7741 authorizes Amoxicillin 500mg, 1 tablet TID for 7 days. All patient PII has been automatically redacted and stored under HIPAA vault rules [Page 1, Box B].',
-    },
-    legal: {
-      name: 'Mutual Non-Disclosure Agreement (NDA)',
-      domain: 'Legal',
-      color: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
-      accent: 'amber',
-      ruleBadge: 'Flagged: Pending Legal Counsel Counter-Signature',
-      ruleColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
-      confidence: '96.5%',
-      summary: 'Bilateral confidentiality and intellectual property agreement governing proprietary software disclosures in Delhi-NCR.',
-      fields: [
-        { label: 'Document Type', value: 'Bilateral Mutual NDA' },
-        { label: 'Disclosing Party', value: 'DocuBrix Technologies Pvt. Ltd., New Delhi' },
-        { label: 'Receiving Party', value: 'Enterprise Infotech India Pvt. Ltd., Gurugram' },
-        { label: 'Confidentiality Term', value: '36 Months from Execution' },
-        { label: 'Governing Law', value: 'High Court of Delhi, New Delhi, India' },
-        { label: 'Signature Audit', value: 'Party 1 Signed, Party 2 Pending' },
-      ],
-      aiQuestion: 'What is the confidentiality term and governing law?',
-      aiAnswer: 'The NDA defines a 3-year (36 months) non-disclosure obligation under the exclusive jurisdiction of the High Court of Delhi, India. Counter-signature by Receiving Party is pending review [Page 3, Section 8].',
-    },
-    administrative: {
-      name: 'Executive Office Circular #ADM-2026-108',
-      domain: 'Administrative',
-      color: 'border-sky-500/30 bg-sky-500/10 text-sky-400',
-      accent: 'sky',
-      ruleBadge: 'Auto-Indexed to Knowledge Base & Broadcast',
-      ruleColor: 'text-sky-400 bg-sky-500/10 border-sky-500/30',
-      confidence: '98.7%',
-      summary: 'Executive operational circular regarding department compliance standards, review schedules, and formatting from Central Secretariat, New Delhi.',
-      fields: [
-        { label: 'Circular Ref', value: 'ADM/2026/CIR-108' },
-        { label: 'Issuing Authority', value: 'Central Administrative Secretariat, New Delhi' },
-        { label: 'Target Audience', value: 'Department Heads & Operational Units' },
-        { label: 'Subject Matter', value: 'Operational Evaluation Protocol' },
-        { label: 'Effective Date', value: 'Immediate Effect (Nov 2026)' },
-        { label: 'Distribution', value: 'Delhi-NCR Departmental Broadcast' },
-      ],
-      aiQuestion: 'Who issued this circular and what are the main deadlines?',
-      aiAnswer: 'Circular ADM/2026/CIR-108 was issued by the Central Administrative Secretariat, New Delhi, mandating operational compliance standards and review timetables [Page 1, Item 4].',
-    },
-  }
-
-  const curSample = domainSamples[activeDomain]
-
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white">
-      {/* Top Navbar */}
-      <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link to="/" className="flex items-center gap-2">
-              <img src="/docubrix-logo.png" alt="DocuBrix" className="h-9 w-auto object-contain rounded-lg bg-white/95 px-2.5 py-1 shadow-sm" />
-            </Link>
-            <span className="rounded bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-400 border border-blue-500/20">
-              AI Lifecycle &amp; Workflows
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            {user ? (
-              <Button onClick={() => navigate('/dashboard')} className="bg-blue-600 hover:bg-blue-500 text-white font-medium shadow-lg shadow-blue-600/20">
-                Go to Dashboard <ArrowRight className="ml-1.5 h-4 w-4" />
-              </Button>
-            ) : (
-              <>
-                <Button variant="ghost" onClick={() => navigate('/login')} className="text-slate-300 hover:text-white hover:bg-slate-900 text-sm">
-                  Sign In
-                </Button>
-                <Button onClick={() => navigate('/login')} className="bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm shadow-lg shadow-blue-600/20">
-                  Launch Workspace <ArrowRight className="ml-1.5 h-4 w-4" />
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1">
-        {/* 1. Hero Section */}
-        <section className="relative overflow-hidden pt-20 pb-20 px-6 max-w-7xl mx-auto text-center">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[320px] bg-blue-600/15 blur-[130px] rounded-full pointer-events-none" />
-          
-          <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-1.5 text-xs font-semibold text-blue-400 mb-6 backdrop-blur">
-            <Sparkles className="h-3.5 w-3.5 text-blue-300" />
-            <span>Effortless Multi-Domain Document Understanding &amp; Governance</span>
-          </div>
-
-          <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-tight sm:leading-none mb-6">
-            Intelligent Document Automation. <br className="hidden sm:inline" />
-            <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-sky-400 bg-clip-text text-transparent">
-              Made Effortless for Everyone.
-            </span>
-          </h1>
-
-          <p className="max-w-2xl mx-auto text-base sm:text-lg text-slate-300 mb-10 leading-relaxed font-normal">
-            Stop drowning in invoices, transcripts, medical slips, and contracts. DocuBrix reads messy documents, extracts key fields with 98%+ precision, triggers automated compliance checks, and lets you ask questions with zero hallucinations.
-          </p>
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-14">
-            <Button size="lg" onClick={() => navigate(user ? '/dashboard' : '/login')} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3.5 rounded-xl font-semibold shadow-xl shadow-blue-600/25 flex items-center gap-2 text-base">
-              Launch Workspace Free <ArrowRight className="h-5 w-5" />
-            </Button>
-            <Button size="lg" variant="outline" onClick={() => {
-              const el = document.getElementById('interactive-demo')
-              if (el) el.scrollIntoView({ behavior: 'smooth' })
-            }} className="border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-slate-200 px-7 py-3.5 rounded-xl font-medium text-base">
-              See Live Interactive Demo
-            </Button>
-          </div>
-
-          {/* User Value Metric Sentinel Badges */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-4xl mx-auto border border-slate-800/80 bg-slate-900/40 backdrop-blur rounded-2xl p-4 text-left">
-            <div className="p-3 border-r border-slate-800/60">
-              <div className="text-2xl font-bold text-white">5 Domains</div>
-              <div className="text-xs text-slate-400">Financial, Academic, Medical, Legal, Admin</div>
-            </div>
-            <div className="p-3 border-r border-slate-800/60">
-              <div className="text-2xl font-bold text-emerald-400">98.6% Accuracy</div>
-              <div className="text-xs text-slate-400">Multi-Signal Confidence Scoring</div>
-            </div>
-            <div className="p-3 border-r border-slate-800/60">
-              <div className="text-2xl font-bold text-amber-400">Automated Gates</div>
-              <div className="text-xs text-slate-400">Spend Limits, PHI Vault &amp; Approvals</div>
-            </div>
-            <div className="p-3">
-              <div className="text-2xl font-bold text-purple-400">Grounded RAG</div>
-              <div className="text-xs text-slate-400">Exact Page &amp; Line Citations</div>
-            </div>
-          </div>
-        </section>
-
-        {/* 2. Interactive Product Feature Showcase (HomePilot Style) */}
-        <section id="interactive-demo" className="py-16 border-t border-slate-800/60 bg-slate-900/20">
-          <div className="max-w-6xl mx-auto px-6">
-            <div className="text-center max-w-2xl mx-auto mb-10">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-semibold mb-3 border border-blue-500/20">
-                <FileText className="h-3.5 w-3.5" />
-                <span>Interactive Live Demo</span>
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">See How DocuBrix Understands Any Document</h2>
-              <p className="text-sm text-slate-400">Select any document type below to see how DocuBrix extracts structured data, runs rule checks, and answers questions in real-time.</p>
-            </div>
-
-            {/* Domain Selector Chips */}
-            <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
-              {[
-                { id: 'financial', label: 'Financial (Invoices)', icon: '🧾' },
-                { id: 'academic', label: 'Academic (Transcripts)', icon: '🎓' },
-                { id: 'medical', label: 'Medical (Prescriptions)', icon: '🩺' },
-                { id: 'legal', label: 'Legal (NDAs / Contracts)', icon: '⚖️' },
-                { id: 'administrative', label: 'Administrative (Notices)', icon: '🏛️' },
-              ].map((d) => (
-                <button
-                  key={d.id}
-                  onClick={() => setActiveDomain(d.id)}
-                  className={`px-4 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 ${
-                    activeDomain === d.id
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25 border border-blue-500'
-                      : 'bg-slate-900/70 text-slate-400 border border-slate-800 hover:border-slate-700 hover:text-slate-200'
-                  }`}
-                >
-                  <span>{d.icon}</span>
-                  <span>{d.label}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Interactive Document Preview Card */}
-            <div className="border border-slate-800 bg-slate-900/60 backdrop-blur rounded-2xl p-6 sm:p-8 shadow-2xl">
-              <div className="flex flex-col md:flex-row items-start justify-between gap-4 pb-6 border-b border-slate-800">
-                <div>
-                  <div className="flex items-center gap-3 mb-1.5">
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${curSample.color}`}>
-                      {curSample.domain}
-                    </span>
-                    <span className="text-xs text-slate-400">Confidence: <strong className="text-emerald-400">{curSample.confidence}</strong></span>
-                  </div>
-                  <h3 className="text-xl font-bold text-white">{curSample.name}</h3>
-                  <p className="text-xs text-slate-400 mt-1 max-w-xl">{curSample.summary}</p>
-                </div>
-                <div className={`px-3.5 py-2 rounded-xl text-xs font-semibold border flex items-center gap-2 ${curSample.ruleColor}`}>
-                  <Zap className="h-4 w-4 shrink-0" />
-                  <span>{curSample.ruleBadge}</span>
-                </div>
-              </div>
-
-              {/* Parsed Fields Grid */}
-              <div className="mt-6">
-                <div className="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-3 flex items-center gap-2">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-400" />
-                  <span>Extracted Structured Key-Value Entities</span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {curSample.fields.map((f, i) => (
-                    <div key={i} className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3">
-                      <div className="text-[11px] text-slate-400 font-medium">{f.label}</div>
-                      <div className="text-sm font-semibold text-slate-100 mt-0.5 truncate">{f.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Conversational Grounded AI Dialogue Preview */}
-              <div className="mt-6 pt-6 border-t border-slate-800/80">
-                <div className="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-3 flex items-center gap-2">
-                  <Bot className="h-3.5 w-3.5 text-purple-400" />
-                  <span>Grounded AI Assistant Q&amp;A (Zero Hallucination with Citations)</span>
-                </div>
-                <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-4 space-y-3">
-                  <div className="flex items-start gap-2.5 text-xs">
-                    <span className="font-bold text-slate-400 shrink-0">User:</span>
-                    <span className="text-slate-300 italic">&ldquo;{curSample.aiQuestion}&rdquo;</span>
-                  </div>
-                  <div className="flex items-start gap-2.5 text-xs bg-purple-950/20 border border-purple-500/20 rounded-lg p-3">
-                    <span className="font-bold text-purple-400 shrink-0">DocuBrix:</span>
-                    <span className="text-slate-200">{curSample.aiAnswer}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 3. "How It Works" 3-Step Visual Process */}
-        <section className="py-20 border-t border-slate-800/60 bg-slate-950">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="text-center max-w-2xl mx-auto mb-16">
-              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">How DocuBrix Works for You</h2>
-              <p className="text-sm text-slate-400">From raw messy file to fully verified actions in three automated steps.</p>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-8 relative">
-              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 relative">
-                <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold text-base mb-4 border border-blue-500/20">
-                  1
-                </div>
-                <h3 className="font-semibold text-lg text-white mb-2">Drop Any File</h3>
-                <p className="text-sm text-slate-400 leading-relaxed">
-                  Upload invoices, student transcripts, medical slips, or contracts in PDF, PNG, or JPG formats. DocuBrix cleans up noise and runs optical character recognition automatically.
-                </p>
-              </div>
-
-              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 relative">
-                <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold text-base mb-4 border border-amber-500/20">
-                  2
-                </div>
-                <h3 className="font-semibold text-lg text-white mb-2">Instant Understanding &amp; Rules</h3>
-                <p className="text-sm text-slate-400 leading-relaxed">
-                  Multi-signal heuristics classify your document, extract entities, compute confidence scores, and evaluate active workflow rules like spend limits and HIPAA privacy safeguards.
-                </p>
-              </div>
-
-              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/40 relative">
-                <div className="h-10 w-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center font-bold text-base mb-4 border border-purple-500/20">
-                  3
-                </div>
-                <h3 className="font-semibold text-lg text-white mb-2">Review, Export &amp; Chat</h3>
-                <p className="text-sm text-slate-400 leading-relaxed">
-                  Approve flagged files in the Review Queue, export clean CSV audit trails for compliance auditors, or query your document corpus with our citation-grounded AI assistant.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 4. Core User Benefits Grid */}
-        <section className="py-20 border-t border-slate-800/60 bg-slate-900/30">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="text-center max-w-2xl mx-auto mb-16">
-              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">Core User Capabilities</h2>
-              <p className="text-sm text-slate-400">Everything modern businesses, educational institutes, and healthcare organizations need in one clean workspace.</p>
-            </div>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
-                <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mb-4">
-                  <FileText className="h-5 w-5" />
-                </div>
-                <h3 className="font-semibold text-base text-white mb-2">Zero-Manual Data Entry</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">Instantly parses complex tables, totals, invoice IDs, and signatures with multi-signal confidence metrics.</p>
-              </div>
-
-              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
-                <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center mb-4">
-                  <Zap className="h-5 w-5" />
-                </div>
-                <h3 className="font-semibold text-base text-white mb-2">Automated Policy Rules</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">Set custom rules: flag high-value spend, enforce low-confidence human review, and protect confidential records.</p>
-              </div>
-
-              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
-                <div className="h-10 w-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mb-4">
-                  <Bot className="h-5 w-5" />
-                </div>
-                <h3 className="font-semibold text-base text-white mb-2">Grounded AI Chat</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">Interrogate your document repository in plain English. Every response includes page and paragraph evidence citations.</p>
-              </div>
-
-              <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 transition">
-                <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-4">
-                  <ShieldCheck className="h-5 w-5" />
-                </div>
-                <h3 className="font-semibold text-base text-white mb-2">Audit-Ready Trail (CSV)</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">Track every review decision, timestamp, and status change. Export full CSV audit logs in a single click.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 5. Enterprise Architecture & Tech Stack (Placed below features, as Dhruv recommended) */}
-        <section className="py-20 border-t border-slate-800/60 bg-slate-950">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="text-center max-w-2xl mx-auto mb-16">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-semibold mb-3 border border-slate-700">
-                <Sliders className="h-3.5 w-3.5 text-blue-400" />
-                <span>Under the Hood</span>
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">Enterprise-Grade Technical Architecture</h2>
-              <p className="text-sm text-slate-400">Engineered with modern decoupled services, sub-second latency, cryptographic user tenancy, and scalable cloud hosting.</p>
-            </div>
-
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-left">
-              <div className="p-5 rounded-xl border border-slate-800 bg-slate-900/40">
-                <div className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-1">Frontend Layer</div>
-                <div className="font-semibold text-white text-sm mb-1">React 18 + Tailwind CSS</div>
-                <p className="text-xs text-slate-400">Vite-powered SPA, Lucide UI icons, responsive multi-view workspace with live telemetry charts.</p>
-              </div>
-              <div className="p-5 rounded-xl border border-slate-800 bg-slate-900/40">
-                <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">API &amp; Backend</div>
-                <div className="font-semibold text-white text-sm mb-1">FastAPI + Python 3.11</div>
-                <p className="text-xs text-slate-400">Asynchronous REST endpoints, SQLAlchemy ORM, deterministic rule engine, and Pytest coverage (90/90 tests).</p>
-              </div>
-              <div className="p-5 rounded-xl border border-slate-800 bg-slate-900/40">
-                <div className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-1">AI &amp; Vector Index</div>
-                <div className="font-semibold text-white text-sm mb-1">ChromaDB + Gemini 2.5</div>
-                <p className="text-xs text-slate-400">Dense sentence embeddings, chunk-level vector search with fail-safe fallback and verbatim citations.</p>
-              </div>
-              <div className="p-5 rounded-xl border border-slate-800 bg-slate-900/40">
-                <div className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-1">Cloud Infrastructure</div>
-                <div className="font-semibold text-white text-sm mb-1">Render PaaS Cloud Deploy</div>
-                <p className="text-xs text-slate-400">Automated Git deployment pipelines, PBKDF2-HMAC password encryption, and multi-tenant isolation.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 6. CTA Banner */}
-        <section className="py-16 border-t border-slate-800/60 bg-gradient-to-b from-slate-950 to-blue-950/30 text-center px-6">
-          <div className="max-w-4xl mx-auto">
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">Ready to Automate Your Document Workflow?</h2>
-            <p className="text-slate-300 text-sm sm:text-base mb-8 max-w-xl mx-auto">Experience the full power of autonomous document classification, spend safeguard rules, and citation-grounded AI.</p>
-            <Button size="lg" onClick={() => navigate(user ? '/dashboard' : '/login')} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3.5 rounded-xl font-semibold shadow-xl shadow-blue-600/30 text-base">
-              Launch Workspace Now <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-          </div>
-        </section>
-      </main>
-
-      {/* 7. Product Footer */}
-      <footer className="border-t border-slate-800/80 py-8 px-6 text-xs text-slate-500 bg-slate-950">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <img src="/docubrix-logo.png" alt="DocuBrix" className="h-6 w-auto object-contain rounded bg-white/95 px-1.5 py-0.5" />
-            <span className="font-semibold text-slate-300">DocuBrix</span>
-            <span className="text-slate-600">|</span>
-            <span className="text-slate-400">Intelligent Document Processing &amp; Workflow Automation</span>
-          </div>
-          <div className="flex items-center gap-6 text-slate-400">
-            <a href="#interactive-demo" className="hover:text-slate-200 transition-colors">Features</a>
-            <span>&bull;</span>
-            <span className="hover:text-slate-200 transition-colors">Security &amp; PHI Shield</span>
-            <span>&bull;</span>
-            <span className="hover:text-slate-200 transition-colors">API Architecture</span>
-          </div>
-          <p className="text-slate-500">&copy; 2026 DocuBrix Inc. All rights reserved.</p>
-        </div>
-      </footer>
-    </div>
-  )
-}
+import LandingPage from './pages/LandingPage'
+import CommandPalette from './components/CommandPalette'
 
 function App() {
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('docubrix_theme')
+      if (saved) return saved
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+    } catch {
+      return 'light'
+    }
+  })
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+    try {
+      localStorage.setItem('docubrix_theme', theme)
+    } catch {}
+  }, [theme])
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))
+  }
 
   useEffect(() => {
     if (!localStorage.getItem(AUTH_TOKEN_KEY)) {
@@ -580,12 +162,12 @@ function App() {
   }
 
   if (authLoading) {
-    return <div className="flex min-h-screen items-center justify-center bg-slate-100 text-sm text-slate-500">Loading your workspace...</div>
+    return <div className="flex min-h-screen items-center justify-center bg-slate-100 dark:bg-slate-900 text-sm text-slate-500 dark:text-slate-400">Loading your workspace...</div>
   }
 
   return (
     <Routes>
-      <Route path="/" element={<LandingPage user={user} />} />
+      <Route path="/" element={<LandingPage user={user} theme={theme} toggleTheme={toggleTheme} />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="login" setUser={setUser} />} />
       <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="register" setUser={setUser} />} />
       <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
@@ -594,7 +176,7 @@ function App() {
         path="*"
         element={
           user ? (
-            <ProtectedLayout user={user} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} onLogout={handleLogout}>
+            <ProtectedLayout user={user} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} onLogout={handleLogout} theme={theme} toggleTheme={toggleTheme}>
               <Routes>
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/processing" element={<ProcessingPage />} />
@@ -687,29 +269,29 @@ function NotificationMenu({ align = 'right' }) {
       <Button
         variant="ghost"
         size="icon"
-        className="relative h-8 w-8 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+        className="relative h-8 w-8 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
         onClick={() => setOpen((prev) => !prev)}
         title="Notifications"
         type="button"
       >
         <Bell className="h-4 w-4" />
         {unread > 0 && (
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
+          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900" />
         )}
       </Button>
 
       {open && (
         <div
           className={cn(
-            'absolute top-full mt-2 w-80 sm:w-96 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100',
+            'absolute top-full mt-2 w-80 sm:w-96 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100',
             align === 'left' ? 'left-0' : 'right-0'
           )}
         >
-          <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-100 px-1">
+          <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-100 dark:border-slate-800 px-1">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm text-slate-900">Notifications</span>
+              <span className="font-semibold text-sm text-slate-900 dark:text-slate-100">Notifications</span>
               {unread > 0 && (
-                <span className="rounded-full bg-red-50 text-red-600 px-2 py-0.5 text-[10px] font-bold">
+                <span className="rounded-full bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 px-2 py-0.5 text-[10px] font-bold">
                   {unread} new
                 </span>
               )}
@@ -718,7 +300,7 @@ function NotificationMenu({ align = 'right' }) {
               <button
                 type="button"
                 onClick={markAllRead}
-                className="text-xs text-blue-600 hover:text-blue-700 font-medium cursor-pointer"
+                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 font-medium cursor-pointer"
               >
                 Mark all as read
               </button>
@@ -731,7 +313,7 @@ function NotificationMenu({ align = 'right' }) {
                 key={item.id}
                 className={cn(
                   'p-2.5 rounded-xl transition-colors text-left border',
-                  item.unread ? 'bg-blue-50/40 border-blue-100' : 'bg-slate-50/50 border-slate-100'
+                  item.unread ? 'bg-blue-50/40 dark:bg-blue-950/20 border-blue-100 dark:border-blue-900/40' : 'bg-slate-50/50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800'
                 )}
               >
                 <div className="flex items-center justify-between gap-2 mb-1">
@@ -740,13 +322,13 @@ function NotificationMenu({ align = 'right' }) {
                   </span>
                   <span className="text-[10px] text-slate-400">{item.time}</span>
                 </div>
-                <div className="text-xs font-semibold text-slate-800">{item.title}</div>
-                <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{item.desc}</div>
+                <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">{item.title}</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">{item.desc}</div>
               </div>
             ))}
           </div>
 
-          <div className="pt-2.5 mt-2.5 border-t border-slate-100 text-center">
+          <div className="pt-2.5 mt-2.5 border-t border-slate-100 dark:border-slate-800 text-center">
             <span className="text-[10px] text-slate-400">All systems active • Region: Singapore</span>
           </div>
         </div>
@@ -755,20 +337,36 @@ function NotificationMenu({ align = 'right' }) {
   )
 }
 
-function ProtectedLayout({ user, children, mobileOpen, setMobileOpen, onLogout }) {
+function ProtectedLayout({ user, children, mobileOpen, setMobileOpen, onLogout, theme, toggleTheme }) {
   const location = useLocation()
   const currentTitle = appShellNav.find((item) => item.path === location.pathname)?.label || 'Dashboard'
   const visibleNav = appShellNav.filter((item) => item.path !== '/status' || user.role === 'admin')
+  const [cmdOpen, setCmdOpen] = useState(false)
+
+  // Custom user avatar if set in localStorage
+  const customAvatar = localStorage.getItem(`docubrix_avatar_${user.id || user.email}`)
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setCmdOpen((prev) => !prev)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
+      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} theme={theme} onToggleTheme={toggleTheme} />
       <div className="mx-auto flex max-w-[1600px]">
-        <aside className={cn('fixed inset-y-0 left-0 z-40 w-72 border-r border-slate-200 bg-slate-50/95 p-4 transition-transform lg:translate-x-0', mobileOpen ? 'translate-x-0' : '-translate-x-full', 'lg:static')}>
-          <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
+        <aside className={cn('fixed inset-y-0 left-0 z-40 w-72 border-r border-slate-200 dark:border-slate-800 bg-slate-50/95 dark:bg-slate-900/95 p-4 transition-transform lg:translate-x-0', mobileOpen ? 'translate-x-0' : '-translate-x-full', 'lg:static')}>
+          <div className="mb-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 shadow-xs">
             <Link to="/dashboard" className="flex items-center">
-              <img src="/docubrix-logo.png" alt="DocuBrix" className="h-8 w-auto object-contain" />
+              <img src="/docubrix-logo.png" alt="DocuBrix" className="h-8 w-auto object-contain rounded bg-white px-1.5 py-0.5" />
             </Link>
-            <div className="mt-1 text-xs text-slate-500">Document intelligence</div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Document intelligence</div>
           </div>
 
           <nav className="space-y-1">
@@ -778,13 +376,13 @@ function ProtectedLayout({ user, children, mobileOpen, setMobileOpen, onLogout }
                 to={item.path}
                 className={({ isActive }) => cn(
                   'group flex items-center justify-between rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors',
-                  isActive ? 'sidebar-item active border-blue-200 bg-blue-50 text-blue-700' : 'border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-100',
+                  isActive ? 'sidebar-item active border-blue-200 dark:border-blue-800/60 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300' : 'border-transparent text-slate-700 dark:text-slate-300 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800',
                 )}
                 onClick={() => setMobileOpen(false)}
               >
                 <span className="flex items-center gap-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white text-slate-500 shadow-sm">
-                    {item.path === '/dashboard' ? <LayoutDashboard className="h-3.5 w-3.5" /> : item.path === '/chat' ? <Bot className="h-3.5 w-3.5 text-blue-600" /> : item.path === '/automation' ? <Zap className="h-3.5 w-3.5 text-amber-500" /> : item.comingSoon ? <Sparkles className="h-3.5 w-3.5" /> : <FolderOpen className="h-3.5 w-3.5" />}
+                  <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 shadow-sm border border-slate-100 dark:border-slate-700">
+                    {item.path === '/dashboard' ? <LayoutDashboard className="h-3.5 w-3.5" /> : item.path === '/chat' ? <Bot className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" /> : item.path === '/automation' ? <Zap className="h-3.5 w-3.5 text-amber-500" /> : item.comingSoon ? <Sparkles className="h-3.5 w-3.5" /> : <FolderOpen className="h-3.5 w-3.5" />}
                   </span>
                   {item.label}
                 </span>
@@ -793,63 +391,93 @@ function ProtectedLayout({ user, children, mobileOpen, setMobileOpen, onLogout }
             ))}
           </nav>
 
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-3 shadow-soft">
-            <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Workspace</div>
+          <div className="mt-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 shadow-soft">
+            <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Workspace</div>
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Avatar initials={user.name.slice(0, 2).toUpperCase()} className="h-9 w-9 bg-gradient-to-br from-blue-600 to-indigo-400" />
-                <div>
-                  <div className="text-sm font-semibold">{user.name}</div>
-                  <div className="text-xs capitalize text-slate-500">{user.role}</div>
+              <Link to="/profile" className="flex items-center gap-2 group">
+                {customAvatar ? (
+                  <img src={customAvatar} alt="avatar" className="h-9 w-9 rounded-full object-cover ring-2 ring-blue-500/40" />
+                ) : (
+                  <Avatar initials={user.name.slice(0, 2).toUpperCase()} className="h-9 w-9 bg-gradient-to-br from-blue-600 to-indigo-400" />
+                )}
+                <div className="truncate">
+                  <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">{user.name}</div>
+                  <div className="text-xs capitalize text-slate-500 dark:text-slate-400">{user.role}</div>
                 </div>
-              </div>
+              </Link>
               <NotificationMenu align="left" />
             </div>
           </div>
         </aside>
 
         <div className="flex-1">
-          <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
+          <header className="sticky top-0 z-30 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur">
             <div className="flex items-center justify-between px-4 py-3 lg:px-8">
               <div className="flex items-center gap-3">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="lg:hidden"
+                  className="lg:hidden text-slate-700 dark:text-slate-300"
                   onClick={() => setMobileOpen((value) => !value)}
                 >
                   <Menu className="h-5 w-5" />
                 </Button>
                 <Link to="/dashboard" className="flex items-center lg:hidden">
-                  <img src="/docubrix-logo.png" alt="DocuBrix" className="h-6 w-auto object-contain" />
+                  <img src="/docubrix-logo.png" alt="DocuBrix" className="h-6 w-auto object-contain rounded bg-white px-1 py-0.5" />
                 </Link>
                 <div className="hidden lg:block">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Workspace</div>
-                  <div className="text-lg font-semibold text-slate-900">{currentTitle}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Workspace</div>
+                  <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{currentTitle}</div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 md:flex">
-                  <Search className="h-4 w-4 text-slate-500" />
-                  <input className="w-40 border-0 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none" placeholder="Search" />
-                </div>
+                {/* Clickable search button opening Command Palette */}
+                <button
+                  onClick={() => setCmdOpen(true)}
+                  className="hidden items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs text-slate-500 dark:text-slate-400 hover:border-blue-400 transition cursor-pointer md:flex"
+                  type="button"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  <span className="w-28 text-left text-slate-400">Quick jump…</span>
+                  <kbd className="rounded bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                    ⌘K
+                  </kbd>
+                </button>
+
+                {/* Theme Toggle Button */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleTheme}
+                  title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                  className="h-8 w-8 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                >
+                  {theme === 'dark' ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-600" />}
+                </Button>
+
                 <NotificationMenu align="right" />
-                <Link to="/profile" className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5">
-                  <Avatar initials={user.name.slice(0, 2).toUpperCase()} className="h-8 w-8 bg-gradient-to-br from-blue-600 to-indigo-400 text-xs" />
+
+                <Link to="/profile" className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1.5 hover:border-blue-400 transition">
+                  {customAvatar ? (
+                    <img src={customAvatar} alt="avatar" className="h-8 w-8 rounded-full object-cover ring-2 ring-blue-500/40" />
+                  ) : (
+                    <Avatar initials={user.name.slice(0, 2).toUpperCase()} className="h-8 w-8 bg-gradient-to-br from-blue-600 to-indigo-400 text-xs" />
+                  )}
                   <div className="hidden text-left text-sm md:block">
-                    <div className="font-semibold">{user.name}</div>
-                    <div className="text-xs capitalize text-slate-500">{user.role}</div>
+                    <div className="font-semibold text-slate-900 dark:text-slate-100 leading-tight">{user.name}</div>
+                    <div className="text-xs capitalize text-slate-500 dark:text-slate-400">{user.role}</div>
                   </div>
                 </Link>
-                <Button variant="ghost" size="icon" onClick={onLogout}>
+
+                <Button variant="ghost" size="icon" onClick={onLogout} className="text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400">
                   <LogOut className="h-4 w-4" />
                 </Button>
               </div>
             </div>
           </header>
 
-          <main className="px-4 py-6 lg:px-8">{children}</main>
+          <main className="px-4 py-6 lg:px-8 page-enter">{children}</main>
         </div>
       </div>
     </div>
@@ -892,56 +520,56 @@ function AuthPage({ mode, setUser }) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10">
-      <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-soft sm:p-8">
+    <div className="flex min-h-screen items-center justify-center bg-slate-100 dark:bg-slate-950 px-4 py-10 transition-colors">
+      <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-soft sm:p-8">
         <div className="mb-6">
           <Link to="/" className="inline-block">
-            <img src="/docubrix-logo.png" alt="DocuBrix" className="h-10 w-auto object-contain" />
+            <img src="/docubrix-logo.png" alt="DocuBrix" className="h-10 w-auto object-contain rounded bg-white px-2 py-0.5" />
           </Link>
-          <div className="mt-1 text-sm text-slate-500">Document intelligence workspace</div>
+          <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">Document intelligence workspace</div>
         </div>
 
         <div className="mb-6">
-          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Authentication</div>
-          <h1 className="mt-2 text-2xl font-semibold text-slate-900">{titleMap[mode]}</h1>
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Authentication</div>
+          <h1 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{titleMap[mode]}</h1>
         </div>
 
         <form className="space-y-4" onSubmit={onSubmit}>
           {mode === 'register' && (
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Full name</label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Full name</label>
               <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your full name" required />
             </div>
           )}
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Email address</label>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Email address</label>
             <Input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="name@company.com" required />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Password</label>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Password</label>
             <Input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="At least 8 characters" required />
           </div>
 
-          <Button type="submit" className="w-full" disabled={submitting}>
+          <Button type="submit" className="w-full active:scale-95 transition-transform" disabled={submitting}>
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {mode === 'login' ? 'Sign in' : 'Create account'}
           </Button>
         </form>
 
-        <div className="mt-6 text-center text-sm text-slate-600">
+        <div className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
           {mode === 'login' ? (
             <div>
               Don&apos;t have an account?{' '}
-              <Link to="/register" className="font-semibold text-blue-600 hover:text-blue-500 hover:underline">
+              <Link to="/register" className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 hover:underline">
                 Create an account
               </Link>
             </div>
           ) : (
             <div>
               Already have an account?{' '}
-              <Link to="/login" className="font-semibold text-blue-600 hover:text-blue-500 hover:underline">
+              <Link to="/login" className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 hover:underline">
                 Sign in
               </Link>
             </div>
@@ -1050,9 +678,9 @@ function DashboardPage() {
             <CardTitle>Recent documents</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-sm">
               <thead>
-                <tr className="text-left text-slate-600">
+                <tr className="text-left text-slate-600 dark:text-slate-400">
                   <th className="py-2 pr-4">Filename</th>
                   <th className="py-2 pr-4">Type</th>
                   <th className="py-2 pr-4">Status</th>
@@ -1060,14 +688,14 @@ function DashboardPage() {
                   <th className="py-2 pr-4">Uploaded</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                 {(summary.recent_documents || []).map((item) => (
-                  <tr key={item.document_id || item.filename} className="hover:bg-slate-50">
-                    <td className="py-3 pr-4 font-medium text-slate-900">{item.filename}</td>
+                  <tr key={item.document_id || item.filename} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="py-3 pr-4 font-medium text-slate-900 dark:text-slate-100">{item.filename}</td>
                     <td className="py-3 pr-4"><ClassificationBadge classification={item.classification} documentType={item.document_type} /></td>
                     <td className="py-3 pr-4"><Badge variant={statusColors[item.status] || 'muted'}>{item.status || 'unknown'}</Badge></td>
-                    <td className="py-3 pr-4">{safeFloat((item.confidence || {}).overall)?.toFixed(2) || 'N/A'}</td>
-                    <td className="py-3 pr-4">{formatDate(item.upload_time)}</td>
+                    <td className="py-3 pr-4 text-slate-700 dark:text-slate-300">{safeFloat((item.confidence || {}).overall)?.toFixed(2) || 'N/A'}</td>
+                    <td className="py-3 pr-4 text-slate-500 dark:text-slate-400">{formatDate(item.upload_time)}</td>
                   </tr>
                 ))}
               </tbody>

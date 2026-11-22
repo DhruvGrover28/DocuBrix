@@ -8,10 +8,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="DocuBrix document intelligence platform" />
     <title>DocuBrix</title>
-    <script type="module" crossorigin src="/assets/index-PVMn6cCG.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-B5ql59lK.css">
+    <script type="module" crossorigin src="/assets/index-BAKRb-nj.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DlPz3Xab.css">
   </head>
   <body class="bg-slate-50">
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('docubrix_theme');
+          if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+          }
+        } catch(e) {}
+      })();
+    </script>
     <div id="root"></div>
   </body>
 </html>

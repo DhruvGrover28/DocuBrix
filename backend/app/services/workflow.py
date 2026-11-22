@@ -40,7 +40,7 @@ DEFAULT_WORKFLOW_RULES: list[dict[str, Any]] = [
     {
         "id": "rule-high-value-invoice",
         "name": "High-Value Invoice Spend Gate",
-        "description": "Flag invoices exceeding $1,000 for secondary financial supervisor sign-off.",
+        "description": "Flag invoices exceeding ₹1,000 / $1,000 for secondary financial supervisor sign-off.",
         "rule_type": "alert_trigger",
         "enabled": True,
         "conditions": {
@@ -50,7 +50,7 @@ DEFAULT_WORKFLOW_RULES: list[dict[str, Any]] = [
         "action": {
             "target_status": "pending_approval",
             "tag": "high_value_spend",
-            "notification": "Invoice exceeds $1,000 threshold. Supervisor sign-off required.",
+            "notification": "Invoice exceeds ₹1,000 / $1,000 threshold. Supervisor sign-off required.",
         },
     },
     {

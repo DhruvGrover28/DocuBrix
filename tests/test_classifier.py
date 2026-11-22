@@ -214,3 +214,155 @@ def test_train_and_evaluate_pipeline(tmp_path: Path) -> None:
     assert "vectorizer" in loaded
     assert "classifier" in loaded
 
+
+def test_production_bundled_model_loads_and_classifies_all_12_classes() -> None:
+    """Validate that the production model artifact loads and classifies all domain types with ML probabilities."""
+    samples = {
+        "invoice": (
+            "TAX INVOICE\nVendor: Apex Cloud Technologies LLC\nBill To: Wayne Enterprises\n"
+            "Invoice Number: INV-2026-9041\nSubtotal: $4,500.00\nTax: $450.00\nTotal Amount Due: $4,950.00\n"
+            "Payment Terms: Net 30 Days",
+            "Financial",
+        ),
+        "receipt": (
+            "SuperMart Store #402\nSales Receipt: TXN-492102\nSubtotal: $45.00\nSales Tax: $3.60\n"
+            "Total Paid: $48.60\nPayment Method: Credit Card ending 4128\nThank you for shopping!",
+            "Financial",
+        ),
+        "bank_statement": (
+            "JPMorgan Chase Bank, N.A.\nMONTHLY ACCOUNT STATEMENT\nAccount Name: Robert Langdon\n"
+            "Account Number: XXXX-XXXX-4912\nBeginning Balance: $8,400.00\nEnding Balance: $9,250.00\n"
+            "Transaction History: Direct Deposit Payroll $3,500.00",
+            "Financial",
+        ),
+        "salary_slip": (
+            "Infosys Global Technologies\nCONFIDENTIAL PAYSLIP\nEmployee Name: Dhruv Grover\n"
+            "Employee ID: EMP-4921\nGross Pay: $6,500.00\nProvident Fund: $450.00\nNet Salary: $5,250.00",
+            "Financial",
+        ),
+        "academic_transcript": (
+            "DELHI TECHNOLOGICAL UNIVERSITY\nOFFICIAL TRANSCRIPT OF ACADEMIC RECORD\n"
+            "Student Name: Pranav Bisht\nRoll Number: 2K20/CO/315\nDegree: Bachelor of Technology\n"
+            "Credits Registered: 24 | Cumulative GPA (CGPA): 8.92 / 10.0\nSemester: VII Semester",
+            "Academic",
+        ),
+        "academic_certificate": (
+            "STANFORD UNIVERSITY\nDEGREE CERTIFICATE\nThe Chancellor and Academic Council hereby certify "
+            "that the degree of Master of Science in Artificial Intelligence has been conferred upon "
+            "Diana Prince having fulfilled all requirements.",
+            "Academic",
+        ),
+        "legal_contract": (
+            "MASTER SERVICES AGREEMENT\nThis Agreement is entered into by and between Acme Global Holdings "
+            "('Client') and Beta Consulting ('Contractor').\nTerms and Conditions: Scope of Work, "
+            "Warranties and Representations, Indemnification, Governing Law: Courts of Delhi.",
+            "Legal",
+        ),
+        "non_disclosure_agreement": (
+            "MUTUAL NON-DISCLOSURE AGREEMENT (NDA)\nThis Confidentiality Agreement is entered into between "
+            "Alpha Dynamics ('Disclosing Party') and Pinnacle Technologies ('Receiving Party'). "
+            "Confidential Information shall remain protected. Trade secret obligations survive 5 years.",
+            "Legal",
+        ),
+        "medical_prescription": (
+            "APOLLO CLINICAL HEALTHCARE\nOUTPATIENT CLINICAL PRESCRIPTION\nConsultant: Dr. Arvind Sharma, MD\n"
+            "Patient Name: John Doe | Age/Sex: 34 Yrs / Male\nRx:\n1. Tab. Paracetamol 650mg - 1 tab three times daily\n"
+            "2. Syrup CoughRelief 10ml at bedtime\nDoctor Signature",
+            "Medical",
+        ),
+        "medical_lab_report": (
+            "QUEST DIAGNOSTICS PATHOLOGY\nLABORATORY INVESTIGATION REPORT\nPatient Name: Jane Doe\n"
+            "Department: Clinical Biochemistry\nTest Name: Complete Blood Count\n"
+            "Haemoglobin | Observed Value: 14.2 g/dL | Biological Reference Interval: 13.0 - 17.0\nPathologist: Dr. N. Sengupta",
+            "Medical",
+        ),
+        "identity_document": (
+            "GOVERNMENT ISSUED OFFICIAL PASSPORT\nDocument Number: P9482014\nCardholder Full Name: PRANAV BISHT\n"
+            "Date of Birth (DOB): 2002-05-14\nGender: MALE\nNationality: INDIAN\n"
+            "Issuing Authority: Government Ministry of External Affairs\nExpiry Date: 2032-05-13",
+            "Administrative",
+        ),
+        "official_notice": (
+            "OFFICE OF THE REGISTRAR, CENTRAL UNIVERSITY\nOFFICE MEMORANDUM / OFFICIAL NOTICE\n"
+            "Reference No: ADM/NOT/2026/412\nSubject: Administrative Circular regarding revised office hours.\n"
+            "By Order of the Competent Authority\nJoint Secretary",
+            "Administrative",
+        ),
+    }
+
+    for expected_type, (sample_text, expected_category) in samples.items():
+        res = classify_document_result(sample_text)
+        assert res.method == "ml", f"Expected ML classification for {expected_type}, got {res.method}"
+        assert res.status == "classified"
+        assert res.document_type == expected_type, f"Expected {expected_type}, got {res.document_type}"
+        assert res.category == expected_category, f"Expected category {expected_category}, got {res.category}"
+        assert res.confidence is not None and res.confidence >= 0.30, f"Low confidence {res.confidence} for {expected_type}"
+        assert res.model_name == "tfidf-logistic-regression"
+
+
+def test_resume_and_general_documents_not_misclassified_as_financial() -> None:
+    """Ensure generic non-financial documents (Resumes, cover letters) are classified as General / other_document."""
+    resume_text = (
+        "Pranav Bisht\n"
+        "Email: pranav@example.com | Phone: +91-9876543210 | GitHub: github.com/Tester-acc-007\n"
+        "LinkedIn: linkedin.com/in/pranavbisht\n\n"
+        "PROFESSIONAL SUMMARY\n"
+        "Full Stack & ML Engineer with hands-on experience developing document workflows, "
+        "FastAPI backends, and React single-page applications.\n\n"
+        "TECHNICAL SKILLS\n"
+        "Python, JavaScript, React, FastAPI, SQLite, PostgreSQL, PyTorch, Scikit-learn, TailwindCSS\n\n"
+        "WORK EXPERIENCE\n"
+        "Software Engineering Intern — Cloud Systems (2025 - Present)\n"
+        "• Built automated microservices for document parsing and workflow gates.\n"
+        "• Implemented JWT authentication and responsive UI cards.\n\n"
+        "EDUCATION\n"
+        "Bachelor of Technology in Computer Science, GPA: 8.9/10.0\n"
+        "PROJECTS & CERTIFICATIONS\n"
+        "DocuBrix: End-to-end intelligent document platform."
+    )
+    res_resume = classify_document_result(resume_text)
+    assert res_resume.document_type == "other_document"
+    assert res_resume.category == "General"
+    assert res_resume.category != "Financial"
+
+    cover_letter = (
+        "Date: November 21, 2026\n"
+        "Hiring Manager\n"
+        "Technology Solutions Group\n\n"
+        "Dear Hiring Team,\n\n"
+        "I am writing to express my enthusiasm for the Software Engineering position. "
+        "With expertise in scalable systems, I look forward to discussing my qualifications.\n\n"
+        "Sincerely,\n"
+        "Pranav Bisht"
+    )
+    res_letter = classify_document_result(cover_letter)
+    assert res_letter.document_type == "other_document"
+    assert res_letter.category == "General"
+    assert res_letter.category != "Financial"
+
+
+def test_heuristic_fallback_prevents_resume_from_misclassification(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Ensure that even in fallback mode, resumes and general text are General/other_document and not Financial."""
+    monkeypatch.setenv("DOCUBRIX_CLASSIFIER_PATH", str(tmp_path / "absent_model.pkl"))
+
+    resume_text = (
+        "Candidate Resume\n"
+        "Name: Alex Taylor\n"
+        "Professional Summary: Senior Developer\n"
+        "Work Experience: 6 years in software development\n"
+        "Technical Skills: Python, TypeScript, Docker\n"
+        "Education: B.S. in Computer Science"
+    )
+    res = classify_document_result(resume_text)
+    assert res.method == "heuristic_fallback"
+    assert res.document_type == "other_document"
+    assert res.category == "General"
+    assert res.category != "Financial"
+
+    generic_note = "Meeting Notes\nDiscussed sprint milestones and team alignment for Q4."
+    res_note = classify_document_result(generic_note)
+    assert res_note.method == "heuristic_fallback"
+    assert res_note.category == "General"
+    assert res_note.category != "Financial"
+
+

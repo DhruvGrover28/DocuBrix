@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
@@ -35,6 +36,7 @@ from backend.app.services.document_processor import (
 from backend.app.services.classifier import (
     DOCUMENT_CATEGORY_MAP,
     classify_document_result,
+    load_classifier_model,
 )
 from backend.app.services.workflow import (
     add_workflow_rule,
@@ -50,18 +52,62 @@ from backend.app.services.knowledge import (
     extract_excerpts,
     extract_highlighted_snippet,
     generate_chat_answer,
+    generate_extractive_fallback,
     generate_grounded_answer,
     get_embedding,
+    is_conversational_greeting,
     is_embedding_configured,
     is_llm_configured,
     query_terms,
     rank_chunks_by_relevance,
 )
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    try:
+        ensure_schema()
+        logger.info("Database schema initialized successfully.")
+        if SessionLocal is not None:
+            with SessionLocal() as session:
+                demo_user = session.query(User).filter(User.email == "demo@docubrix.io").first()
+                if not demo_user:
+                    session.add(
+                        User(
+                            id=str(uuid.uuid4()),
+                            name="DocuBrix Demo User",
+                            email="demo@docubrix.io",
+                            password_hash=hash_password("Demo1234!"),
+                            role="admin",
+                        )
+                    )
+                    session.commit()
+                    logger.info("Demo user demo@docubrix.io seeded successfully.")
+    except Exception as exc:
+        logger.error("Database schema initialization encountered an error: %s", exc)
+
+    try:
+        model_artifact = load_classifier_model()
+        if model_artifact:
+            logger.info(
+                "Document Classifier ML model loaded successfully: %s v%s (%d classes)",
+                model_artifact.get("model_name"),
+                model_artifact.get("model_version"),
+                len(model_artifact.get("labels", [])),
+            )
+        else:
+            logger.warning("Document Classifier ML model artifact not found or invalid; heuristic fallback will be active.")
+    except Exception as exc:
+        logger.error("Classifier model loading encountered an error: %s", exc)
+
+    yield
+    # Shutdown (nothing needed)
+
 app = FastAPI(
     title=APP_NAME,
     version=APP_VERSION,
     description="DocuBrix financial document processing service",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -73,12 +119,6 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-def initialize_database() -> None:
-    try:
-        ensure_schema()
-    except Exception:
-        pass
 
 
 def serialize_user(user: User) -> dict[str, Any]:
@@ -657,18 +697,33 @@ def upload_document(
 
     try:
         with SessionLocal() as session:
-            document = Document(
-                owner_id=user.id,
-                filename=filename,
-                status=initial_status,
-                file_type=extension,
-                document_type=document_type,
-                classification_method=classification.method,
-                classification_model=f"{classification.model_name}:{classification.model_version}" if classification.model_version and classification.model_name else classification.model_name,
-                classification_confidence=classification.confidence,
-                classified_at=datetime.fromisoformat(classification.classified_at) if classification.classified_at else None,
-                raw_text=cleaned_text,
-                extracted_json={
+            # --- Upsert by filename: reuse existing record for this owner+filename ---
+            existing = (
+                document_query(session, user)
+                .filter(Document.filename == filename)
+                .order_by(Document.upload_time.desc())
+                .first()
+            )
+
+            if existing:
+                # Update the existing record in-place
+                existing.status = initial_status
+                existing.file_type = extension
+                existing.document_type = document_type
+                existing.classification_method = classification.method
+                existing.classification_model = (
+                    f"{classification.model_name}:{classification.model_version}"
+                    if classification.model_version and classification.model_name
+                    else classification.model_name
+                )
+                existing.classification_confidence = classification.confidence
+                existing.classified_at = (
+                    datetime.fromisoformat(classification.classified_at)
+                    if classification.classified_at
+                    else None
+                )
+                existing.raw_text = cleaned_text
+                existing.extracted_json = {
                     "document_type": document_type,
                     "category": category,
                     "classification": classification.as_dict(),
@@ -677,34 +732,68 @@ def upload_document(
                     "extracted_fields": extracted_fields,
                     "validation": validation,
                     "workflow": workflow_eval,
-                },
-                confidence_scores=confidence,
-                review_json={
-                    "manual_corrections": {},
-                    "corrected_values": {},
-                },
-            )
-            session.add(document)
-            session.flush()
-            chunks_text = chunk_text(cleaned_text)
+                    "summary": f"{classification.category} document ({document_type.replace('_', ' ').title()}) processed with {confidence['overall'] * 100:.1f}% confidence.",
+                }
+                existing.confidence_scores = confidence
+                existing.upload_time = datetime.utcnow()
+                session.commit()
+                document = existing
+                document_id = document.id
 
+                # Clean up previous chunks before re-chunking
+                session.query(DocumentChunk).filter(DocumentChunk.document_id == document_id).delete()
+                session.commit()
+            else:
+                document = Document(
+                    owner_id=user.id,
+                    filename=filename,
+                    status=initial_status,
+                    file_type=extension,
+                    document_type=document_type,
+                    classification_method=classification.method,
+                    classification_model=f"{classification.model_name}:{classification.model_version}" if classification.model_version and classification.model_name else classification.model_name,
+                    classification_confidence=classification.confidence,
+                    classified_at=datetime.fromisoformat(classification.classified_at) if classification.classified_at else None,
+                    raw_text=cleaned_text,
+                    extracted_json={
+                        "document_type": document_type,
+                        "category": category,
+                        "classification": classification.as_dict(),
+                        "source": "ocr",
+                        "layout_summary": layout_summary,
+                        "extracted_fields": extracted_fields,
+                        "validation": validation,
+                        "workflow": workflow_eval,
+                        "summary": f"{classification.category} document ({document_type.replace('_', ' ').title()}) processed with {confidence['overall'] * 100:.1f}% confidence.",
+                    },
+                    confidence_scores=confidence,
+                    review_json={
+                        "manual_corrections": {},
+                        "corrected_values": {},
+                    },
+                )
+                session.add(document)
+                session.flush()
+                document_id = document.id
+
+            chunks_text = chunk_text(cleaned_text)
             for index, content in enumerate(chunks_text):
                 session.add(
                     DocumentChunk(
                         owner_id=user.id,
-                        document_id=document.id,
+                        document_id=document_id,
                         chunk_index=index,
                         content=content,
                         embedding=None,
                     )
                 )
             session.commit()
-            record["document_id"] = document.id
+            record["document_id"] = document_id
     except Exception as exc:
         raise HTTPException(status_code=500, detail="The processed document could not be persisted.") from exc
 
     if is_embedding_configured():
-        background_tasks.add_task(generate_document_embeddings_bg, document.id, user.id)
+        background_tasks.add_task(generate_document_embeddings_bg, document_id, user.id)
 
     return record
 
@@ -1170,16 +1259,19 @@ def send_chat_message(conversation_id: str, payload: dict[str, Any], user: User 
         # Rank relevant chunks across the user's documents
         sources = rank_chunks_by_relevance(content, candidate_chunks, filename_map=filename_map, top_k=5)
 
-        # Generate grounded response with Gemini
+        # Generate grounded response with Gemini or intelligent fallback
         try:
-            answer = generate_chat_answer(content, sources, chat_history=chat_history)
+            if is_conversational_greeting(content) and not sources:
+                answer = generate_extractive_fallback(content, sources)
+            else:
+                answer = generate_chat_answer(content, sources, chat_history=chat_history)
         except RuntimeError as exc:
-            logger.error(
-                "[Gemini Diagnostic] Assistant generation failed for conversation %s: %s",
+            logger.warning(
+                "[Gemini Diagnostic] Assistant generation failed for conversation %s: %s. Using grounded extractive fallback.",
                 conv.id,
                 exc,
             )
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
+            answer = generate_extractive_fallback(content, sources)
 
         # Save assistant message with retrieved sources
         assistant_msg = ChatMessage(

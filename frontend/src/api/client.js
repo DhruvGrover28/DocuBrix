@@ -27,7 +27,17 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) localStorage.removeItem(AUTH_TOKEN_KEY)
+    if (error.response?.status === 401) {
+      localStorage.removeItem(AUTH_TOKEN_KEY)
+      if (
+        typeof window !== 'undefined' &&
+        window.location &&
+        !window.location.pathname.includes('/login') &&
+        !window.location.pathname.includes('/register')
+      ) {
+        window.location.href = '/login'
+      }
+    }
     return Promise.reject(error)
   },
 )

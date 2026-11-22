@@ -37,6 +37,67 @@ Amount Due: $120.50
     assert "ocr_confidence" in confidence["signals"]
 
 
+def test_invoice_extraction_complex_multiline_and_formatting() -> None:
+    invoice_text = """INVOICE
+Acme Supplies Inc.
+Invoice Number: INV-2024-001
+Date: 2024-05-12
+Bill To: John Doe
+Description: Consulting Services
+Subtotal: $1,250.00
+Tax: $125.00
+Total: $1,375.00
+Payment due in 30 days.
+"""
+
+    from backend.app.services.document_processor import (
+        extract_financial_fields,
+        validate_extracted_fields,
+    )
+
+    extracted = extract_financial_fields(invoice_text, "invoice")
+
+    assert extracted["vendor"] == "Acme Supplies Inc"
+    assert extracted["invoice_number"] == "INV-2024-001"
+    assert extracted["total_amount"] == "1,375.00"
+    assert extracted["document_date"] == "2024-05-12"
+
+    validation = validate_extracted_fields("invoice", extracted)
+    assert validation["is_valid"] is True
+    assert validation["errors"] == []
+
+
+def test_receipt_extraction_and_subtotal_avoidance() -> None:
+    receipt_text = """SUPERMART STORE #402
+123 Market Street
+Date: 15/04/2024
+Receipt No: REC-9921
+Items:
+Milk $3.50
+Bread $2.50
+Subtotal $6.00
+Tax $0.50
+Total Paid: $6.50
+Payment Method: VISA Card
+Thank you for shopping!
+"""
+
+    from backend.app.services.document_processor import (
+        extract_financial_fields,
+        validate_extracted_fields,
+    )
+
+    extracted = extract_financial_fields(receipt_text, "receipt")
+
+    assert "SUPERMART" in extracted["merchant"]
+    assert extracted["receipt_number"] == "REC-9921"
+    assert extracted["total_amount"] == "6.50"
+    assert extracted["payment_method"] == "VISA Card"
+
+    validation = validate_extracted_fields("receipt", extracted)
+    assert validation["is_valid"] is True
+
+
 def test_upload_and_review_round_trip_persists_manual_corrections(db_required) -> None:
     payload = """BANK STATEMENT
 Account: Checking 1234

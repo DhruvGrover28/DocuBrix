@@ -164,44 +164,44 @@ function LandingPage({ user }) {
 
   const domainSamples = {
     financial: {
-      name: 'Vendor Invoice #INV-2026-9810',
+      name: 'Tax Invoice #INV-2026-9810',
       domain: 'Financial',
       color: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
       accent: 'emerald',
-      ruleBadge: 'Requires CFO Sign-Off (> $3,000 threshold)',
+      ruleBadge: 'Requires Financial Sign-Off (> ₹1,00,000 threshold)',
       ruleColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
       confidence: '98.2%',
-      summary: 'Commercial cloud infrastructure invoice from Apex Cloud Systems Corp. for quarterly compute and database services.',
+      summary: 'Commercial cloud infrastructure invoice from Apex Cloud Systems India Pvt. Ltd. (Connaught Place, New Delhi).',
       fields: [
         { label: 'Invoice No.', value: 'INV-2026-9810' },
-        { label: 'Vendor Name', value: 'Apex Cloud Systems Corp.' },
-        { label: 'Total Amount', value: '$4,250.00 USD' },
-        { label: 'Tax / VAT (10%)', value: '$425.00 USD' },
-        { label: 'Billing Period', value: 'Q3 2026' },
+        { label: 'Vendor Name', value: 'Apex Cloud Systems India Pvt. Ltd.' },
+        { label: 'Total Amount', value: '₹3,45,000.00' },
+        { label: 'GST (18% IGST)', value: '₹52,627.00' },
+        { label: 'GSTIN (Delhi)', value: '07AAACD1234A1Z5' },
         { label: 'Due Date', value: 'December 15, 2026' },
       ],
       aiQuestion: 'What is the total due and does this require manual approval?',
-      aiAnswer: 'The total invoice amount is $4,250.00 USD due on Dec 15, 2026. Because this exceeds the $3,000 spend threshold rule, DocuBrix has routed it to the Review Queue for CFO sign-off [Page 1, Line 18].',
+      aiAnswer: 'The total invoice amount is ₹3,45,000.00 INR due on Dec 15, 2026. Because this exceeds the ₹1,00,000 spend threshold rule, DocuBrix has routed it to the Review Queue for financial supervisor sign-off [Page 1, Line 18].',
     },
     academic: {
-      name: 'Official Academic Transcript — USAR',
+      name: 'Official Academic Transcript & Grade Report',
       domain: 'Academic',
       color: 'border-blue-500/30 bg-blue-500/10 text-blue-400',
       accent: 'blue',
       ruleBadge: 'Auto-Verified (University Registrar Seal Validated)',
       ruleColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
       confidence: '99.1%',
-      summary: 'Undergraduate academic grade card from Guru Gobind Singh Indraprastha University (USAR East Delhi Campus).',
+      summary: 'Undergraduate academic grade card and verified cumulative performance transcript from National Institute of Technology, New Delhi.',
       fields: [
-        { label: 'Student Name', value: 'Pranav Bisht' },
-        { label: 'Enrollment No.', value: '02719051723' },
-        { label: 'Programme', value: 'B.Tech. IIOT (Semester VII)' },
-        { label: 'Cumulative CGPA', value: '8.92 / 10.0' },
-        { label: 'Institution', value: 'USAR, GGSIPU' },
+        { label: 'Student Name', value: 'Alex Morgan' },
+        { label: 'Enrollment No.', value: 'ENR-2024-88410' },
+        { label: 'Programme', value: 'B.Tech. Computer Science (Semester VII)' },
+        { label: 'Cumulative CGPA', value: '9.15 / 10.0' },
+        { label: 'Institution', value: 'National Institute of Technology, Delhi' },
         { label: 'Registrar Seal', value: 'Cryptographically Verified' },
       ],
       aiQuestion: 'What is the student\'s CGPA and enrollment status?',
-      aiAnswer: 'Student Pranav Bisht (Enrollment 02719051723) has a cumulative CGPA of 8.92/10.0 in B.Tech IIOT Semester VII. The official seal was validated with 99.1% confidence [Page 1, Table 2].',
+      aiAnswer: 'Student Alex Morgan (Enrollment ENR-2024-88410) has a cumulative CGPA of 9.15/10.0 in B.Tech Computer Science Semester VII. The official seal was validated with 99.1% confidence [Page 1, Table 2].',
     },
     medical: {
       name: 'Specialist Clinical Prescription & Lab Rx',
@@ -211,14 +211,14 @@ function LandingPage({ user }) {
       ruleBadge: 'Active PHI Shield (Patient Identifiers Redacted)',
       ruleColor: 'text-purple-400 bg-purple-500/10 border-purple-500/30',
       confidence: '97.8%',
-      summary: 'Outpatient clinical diagnosis, vitals, and prescribed pharmaceutical regimen from Metro Specialty Clinic.',
+      summary: 'Outpatient clinical diagnosis, vitals, and prescribed pharmaceutical regimen from Apollo Specialty Hospital, Sarita Vihar, New Delhi.',
       fields: [
         { label: 'Prescribing Physician', value: 'Dr. A. K. Sharma, MD' },
-        { label: 'Medical License', value: 'DMC-REG-2018-9941' },
+        { label: 'Medical Council Reg.', value: 'DMC-REG-2018-9941 (Delhi)' },
         { label: 'Prescription Code', value: 'RX-2026-7741' },
         { label: 'Medication', value: 'Amoxicillin 500mg (TID x 7d)' },
         { label: 'Patient Identity', value: '[REDACTED - HIPAA Guard]' },
-        { label: 'Storage Mode', value: 'Encrypted Security Vault' },
+        { label: 'Hospital Facility', value: 'Sarita Vihar, New Delhi - 110076' },
       ],
       aiQuestion: 'What medication is prescribed and are patient details safe?',
       aiAnswer: 'Prescription RX-2026-7741 authorizes Amoxicillin 500mg, 1 tablet TID for 7 days. All patient PII has been automatically redacted and stored under HIPAA vault rules [Page 1, Box B].',
@@ -231,37 +231,37 @@ function LandingPage({ user }) {
       ruleBadge: 'Flagged: Pending Legal Counsel Counter-Signature',
       ruleColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
       confidence: '96.5%',
-      summary: 'Bilateral confidentiality and intellectual property agreement governing proprietary software disclosures.',
+      summary: 'Bilateral confidentiality and intellectual property agreement governing proprietary software disclosures in Delhi-NCR.',
       fields: [
         { label: 'Document Type', value: 'Bilateral Mutual NDA' },
-        { label: 'Disclosing Party', value: 'DocuBrix Technologies Ltd.' },
-        { label: 'Receiving Party', value: 'Enterprise Partner LLC' },
+        { label: 'Disclosing Party', value: 'DocuBrix Technologies Pvt. Ltd., New Delhi' },
+        { label: 'Receiving Party', value: 'Enterprise Infotech India Pvt. Ltd., Gurugram' },
         { label: 'Confidentiality Term', value: '36 Months from Execution' },
-        { label: 'Governing Law', value: 'High Court of Delhi, New Delhi' },
+        { label: 'Governing Law', value: 'High Court of Delhi, New Delhi, India' },
         { label: 'Signature Audit', value: 'Party 1 Signed, Party 2 Pending' },
       ],
       aiQuestion: 'What is the confidentiality term and governing law?',
-      aiAnswer: 'The NDA defines a 3-year (36 months) non-disclosure obligation under the jurisdiction of the High Court of Delhi. Counter-signature by Receiving Party is pending review [Page 3, Section 8].',
+      aiAnswer: 'The NDA defines a 3-year (36 months) non-disclosure obligation under the exclusive jurisdiction of the High Court of Delhi, India. Counter-signature by Receiving Party is pending review [Page 3, Section 8].',
     },
     administrative: {
-      name: 'Executive Office Circular #2026/CIR-108',
+      name: 'Executive Office Circular #ADM-2026-108',
       domain: 'Administrative',
       color: 'border-sky-500/30 bg-sky-500/10 text-sky-400',
       accent: 'sky',
       ruleBadge: 'Auto-Indexed to Knowledge Base & Broadcast',
       ruleColor: 'text-sky-400 bg-sky-500/10 border-sky-500/30',
       confidence: '98.7%',
-      summary: 'Institutional memorandum regarding Minor Project B.Tech evaluation timelines, rubrics, and formatting.',
+      summary: 'Executive operational circular regarding department compliance standards, review schedules, and formatting from Central Secretariat, New Delhi.',
       fields: [
-        { label: 'Circular Ref', value: 'USAR/2026/CIR-108' },
-        { label: 'Issuing Authority', value: 'Office of the Dean, USAR' },
-        { label: 'Target Audience', value: 'Faculty, Evaluators & Students' },
-        { label: 'Subject Matter', value: 'ARP 455 Evaluation Protocol' },
+        { label: 'Circular Ref', value: 'ADM/2026/CIR-108' },
+        { label: 'Issuing Authority', value: 'Central Administrative Secretariat, New Delhi' },
+        { label: 'Target Audience', value: 'Department Heads & Operational Units' },
+        { label: 'Subject Matter', value: 'Operational Evaluation Protocol' },
         { label: 'Effective Date', value: 'Immediate Effect (Nov 2026)' },
-        { label: 'Distribution', value: 'Campus Intranet Broadcast' },
+        { label: 'Distribution', value: 'Delhi-NCR Departmental Broadcast' },
       ],
       aiQuestion: 'Who issued this circular and what are the main deadlines?',
-      aiAnswer: 'Circular USAR/2026/CIR-108 was issued by the Dean Office, USAR, mandating evaluation standards and minimum 30-page spiral-bound report submissions for ARP 455 [Page 1, Item 4].',
+      aiAnswer: 'Circular ADM/2026/CIR-108 was issued by the Central Administrative Secretariat, New Delhi, mandating operational compliance standards and review timetables [Page 1, Item 4].',
     },
   }
 
@@ -588,14 +588,16 @@ function LandingPage({ user }) {
             <img src="/docubrix-logo.png" alt="DocuBrix" className="h-6 w-auto object-contain rounded bg-white/95 px-1.5 py-0.5" />
             <span className="font-semibold text-slate-300">DocuBrix</span>
             <span className="text-slate-600">|</span>
-            <span className="text-slate-400">B.Tech. Minor Project (ARP 455) &mdash; USAR, GGSIPU</span>
+            <span className="text-slate-400">Intelligent Document Processing &amp; Workflow Automation</span>
           </div>
-          <div className="flex items-center gap-4 text-slate-400">
-            <span>Student: <strong>Pranav Bisht</strong> (02719051723)</span>
+          <div className="flex items-center gap-6 text-slate-400">
+            <a href="#interactive-demo" className="hover:text-slate-200 transition-colors">Features</a>
             <span>&bull;</span>
-            <span>Supervisor: <strong>Dr. Bhanu Prakash Joshi</strong></span>
+            <span className="hover:text-slate-200 transition-colors">Security &amp; PHI Shield</span>
+            <span>&bull;</span>
+            <span className="hover:text-slate-200 transition-colors">API Architecture</span>
           </div>
-          <p className="text-slate-500">&copy; 2026 DocuBrix. All rights reserved.</p>
+          <p className="text-slate-500">&copy; 2026 DocuBrix Inc. All rights reserved.</p>
         </div>
       </footer>
     </div>
@@ -637,8 +639,8 @@ function App() {
       <Route path="/" element={<LandingPage user={user} />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="login" setUser={setUser} />} />
       <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="register" setUser={setUser} />} />
-      <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="forgot" setUser={setUser} />} />
-      <Route path="/reset-password" element={user ? <Navigate to="/dashboard" replace /> : <AuthPage mode="reset" setUser={setUser} />} />
+      <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
+      <Route path="/reset-password" element={<Navigate to="/login" replace />} />
       <Route
         path="*"
         element={
@@ -669,6 +671,138 @@ function App() {
         }
       />
     </Routes>
+  )
+}
+
+function NotificationMenu({ align = 'right' }) {
+  const [open, setOpen] = useState(false)
+  const [unread, setUnread] = useState(3)
+  const [items, setItems] = useState([
+    {
+      id: 1,
+      title: '14-Class ML Classifier Online',
+      desc: 'TF-IDF + Logistic Regression model active with calibrated probability scoring.',
+      time: 'Just now',
+      unread: true,
+      tag: 'ML Model',
+      tagColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    },
+    {
+      id: 2,
+      title: 'Spend Gate Policy Active',
+      desc: 'High-value spend gate guarding invoices exceeding ₹1,000 threshold.',
+      time: '15m ago',
+      unread: true,
+      tag: 'Workflow',
+      tagColor: 'bg-amber-50 text-amber-700 border-amber-200',
+    },
+    {
+      id: 3,
+      title: 'PHI Shield Guarding Records',
+      desc: 'HIPAA confidentiality policy active for prescriptions and clinical lab reports.',
+      time: '1h ago',
+      unread: true,
+      tag: 'Security',
+      tagColor: 'bg-purple-50 text-purple-700 border-purple-200',
+    },
+    {
+      id: 4,
+      title: 'Production Schema Synchronized',
+      desc: 'Database connection verified with Singapore regional routing.',
+      time: '3h ago',
+      unread: false,
+      tag: 'System',
+      tagColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    },
+  ])
+
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const markAllRead = () => {
+    setItems((prev) => prev.map((item) => ({ ...item, unread: false })))
+    setUnread(0)
+  }
+
+  return (
+    <div className="relative inline-block" ref={menuRef}>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="relative h-8 w-8 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+        onClick={() => setOpen((prev) => !prev)}
+        title="Notifications"
+        type="button"
+      >
+        <Bell className="h-4 w-4" />
+        {unread > 0 && (
+          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
+        )}
+      </Button>
+
+      {open && (
+        <div
+          className={cn(
+            'absolute top-full mt-2 w-80 sm:w-96 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100',
+            align === 'left' ? 'left-0' : 'right-0'
+          )}
+        >
+          <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-100 px-1">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sm text-slate-900">Notifications</span>
+              {unread > 0 && (
+                <span className="rounded-full bg-red-50 text-red-600 px-2 py-0.5 text-[10px] font-bold">
+                  {unread} new
+                </span>
+              )}
+            </div>
+            {unread > 0 && (
+              <button
+                type="button"
+                onClick={markAllRead}
+                className="text-xs text-blue-600 hover:text-blue-700 font-medium cursor-pointer"
+              >
+                Mark all as read
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className={cn(
+                  'p-2.5 rounded-xl transition-colors text-left border',
+                  item.unread ? 'bg-blue-50/40 border-blue-100' : 'bg-slate-50/50 border-slate-100'
+                )}
+              >
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded border', item.tagColor)}>
+                    {item.tag}
+                  </span>
+                  <span className="text-[10px] text-slate-400">{item.time}</span>
+                </div>
+                <div className="text-xs font-semibold text-slate-800">{item.title}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{item.desc}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-2.5 mt-2.5 border-t border-slate-100 text-center">
+            <span className="text-[10px] text-slate-400">All systems active • Region: Singapore</span>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -720,9 +854,7 @@ function ProtectedLayout({ user, children, mobileOpen, setMobileOpen, onLogout }
                   <div className="text-xs capitalize text-slate-500">{user.role}</div>
                 </div>
               </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <Bell className="h-4 w-4" />
-              </Button>
+              <NotificationMenu align="left" />
             </div>
           </div>
         </aside>
@@ -753,10 +885,7 @@ function ProtectedLayout({ user, children, mobileOpen, setMobileOpen, onLogout }
                   <Search className="h-4 w-4 text-slate-500" />
                   <input className="w-40 border-0 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none" placeholder="Search" />
                 </div>
-                <Button variant="ghost" size="icon" className="relative">
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" />
-                </Button>
+                <NotificationMenu align="right" />
                 <Link to="/profile" className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5">
                   <Avatar initials={user.name.slice(0, 2).toUpperCase()} className="h-8 w-8 bg-gradient-to-br from-blue-600 to-indigo-400 text-xs" />
                   <div className="hidden text-left text-sm md:block">
@@ -783,8 +912,6 @@ function AuthPage({ mode, setUser }) {
   const titleMap = {
     login: 'Sign in to DocuBrix',
     register: 'Create your account',
-    forgot: 'Reset your password',
-    reset: 'Set a new password',
   }
 
   const [email, setEmail] = useState('')
@@ -794,10 +921,6 @@ function AuthPage({ mode, setUser }) {
 
   const onSubmit = async (event) => {
     event.preventDefault()
-    if (mode === 'forgot' || mode === 'reset') {
-      toast.error('Password reset is not enabled yet. Contact an administrator.')
-      return
-    }
 
     if (!email || !password || (mode === 'register' && !name)) {
       toast.error('Please complete the required fields to continue.')
@@ -823,7 +946,7 @@ function AuthPage({ mode, setUser }) {
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10">
       <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-soft sm:p-8">
         <div className="mb-6">
-          <Link to="/login" className="inline-block">
+          <Link to="/" className="inline-block">
             <img src="/docubrix-logo.png" alt="DocuBrix" className="h-10 w-auto object-contain" />
           </Link>
           <div className="mt-1 text-sm text-slate-500">Document intelligence workspace</div>
@@ -838,34 +961,42 @@ function AuthPage({ mode, setUser }) {
           {mode === 'register' && (
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Full name</label>
-              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your full name" />
+              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your full name" required />
             </div>
           )}
 
-          {(mode === 'login' || mode === 'register' || mode === 'forgot' || mode === 'reset') && (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Email address</label>
-              <Input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="name@company.com" />
-            </div>
-          )}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Email address</label>
+            <Input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="name@company.com" required />
+          </div>
 
-          {(mode === 'login' || mode === 'register' || mode === 'reset') && (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Password</label>
-              <Input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="********" />
-            </div>
-          )}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Password</label>
+            <Input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="At least 8 characters" required />
+          </div>
 
           <Button type="submit" className="w-full" disabled={submitting}>
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {mode === 'login' ? 'Sign in' : mode === 'register' ? 'Create account' : mode === 'forgot' ? 'Send reset link' : 'Update password'}
+            {mode === 'login' ? 'Sign in' : 'Create account'}
           </Button>
         </form>
 
-        <div className="mt-5 flex items-center justify-between text-sm text-slate-600">
-          <Link to="/register" className="font-medium text-blue-700 hover:underline">Create account</Link>
-          <Link to="/forgot-password" className="font-medium text-blue-700 hover:underline">Forgot password</Link>
-          <Link to="/login" className="font-medium text-blue-700 hover:underline">Back to login</Link>
+        <div className="mt-6 text-center text-sm text-slate-600">
+          {mode === 'login' ? (
+            <div>
+              Don&apos;t have an account?{' '}
+              <Link to="/register" className="font-semibold text-blue-600 hover:text-blue-500 hover:underline">
+                Create an account
+              </Link>
+            </div>
+          ) : (
+            <div>
+              Already have an account?{' '}
+              <Link to="/login" className="font-semibold text-blue-600 hover:text-blue-500 hover:underline">
+                Sign in
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -894,13 +1025,18 @@ function StatCard({ label, value, hint, accent }) {
   }
 
   return (
-    <Card className="h-full">
+    <Card className="h-full min-w-0 overflow-hidden">
       <CardContent className="p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</span>
-          <span className={cn('rounded-full px-2 py-1 text-xs font-semibold', accentMap[accent] || accentMap.slate)}>{hint}</span>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 truncate">{label}</span>
+          <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold shrink-0', accentMap[accent] || accentMap.slate)}>{hint}</span>
         </div>
-        <div className="text-3xl font-semibold tracking-tight text-slate-900">{value}</div>
+        <div
+          className="text-xl font-semibold tracking-tight text-slate-900 truncate"
+          title={typeof value === 'string' ? value : undefined}
+        >
+          {value}
+        </div>
       </CardContent>
     </Card>
   )
@@ -1036,54 +1172,55 @@ function DashboardPage() {
 const DEMO_PRESETS = [
   {
     id: 'financial',
-    label: 'Sample Invoice ($4,250)',
+    label: 'Sample Tax Invoice (₹4,59,000)',
     icon: '📄',
     badge: 'Financial',
     badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     filename: 'Sample_Invoice_INV2026.txt',
     text: `TAX INVOICE
-TechCorp Solutions Inc.
-100 Enterprise Way, Suite 400, San Francisco, CA
+TechCorp Solutions India Pvt. Ltd.
+DLF Cyber City, Building 10, Tower B, Gurugram, Delhi-NCR - 122002
 Invoice No: INV-2026-9041
 Invoice Date: 2026-11-18
 Due Date: 2026-12-18
-Bill To: Global Logistics Enterprise
+Bill To: Global Logistics India Pvt. Ltd., Okhla Phase III, New Delhi - 110020
 
 Description: Cloud Infrastructure & AI Pipeline Hosting Services
-Amount: $4,250.00
-Tax Due: $340.00
-Total Due: $4,590.00
+Amount: ₹4,25,000.00
+Tax Due: ₹34,000.00
+Total Due: ₹4,59,000.00
 Payment Terms: Net 30
-Vendor Contact: accounts@techcorp-solutions.com
+Vendor Contact: accounts@techcorp-solutions.in
 GSTIN: 07AAAAA0000A1Z5`,
   },
   {
     id: 'academic',
-    label: 'Academic Transcript (USAR)',
+    label: 'Academic Transcript',
     icon: '🎓',
     badge: 'Academic',
     badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
-    filename: 'Sample_Academic_Transcript_USAR.txt',
-    text: `GURU GOBIND SINGH INDRAPRASTHA UNIVERSITY
-UNIVERSITY SCHOOL OF AUTOMATION & ROBOTICS (USAR)
-East Delhi Campus, Surajmal Vihar, Delhi - 110092
+    filename: 'Sample_Academic_Transcript.txt',
+    text: `NATIONAL INSTITUTE OF TECHNOLOGY, DELHI
+CAMPUS REGISTRAR & ACADEMIC EVALUATION DIVISION
+Narela Sub-City, Delhi - 110040
 ACADEMIC TRANSCRIPT / GRADE REPORT
+Date: 2026-11-15
 
-Candidate Name: Pranav Bisht
-Enrollment No: 03119011922
-University: Guru Gobind Singh Indraprastha University (USAR)
-Course: Bachelor of Technology (B.Tech) - Artificial Intelligence & Data Science
-Semester: 7th Semester (Academic Year 2026)
+Candidate Name: Alex Morgan
+Enrollment No: 02219051720
+University: National Institute of Technology, Delhi
+Course: Bachelor of Technology (B.Tech) - Computer Science
+Semester: VII (Academic Year 2026)
 
 Course Code | Course Title | Credits | Grade
-AIDS-401   | Deep Learning & Neural Architectures | 4 | A+
-AIDS-403   | Natural Language Processing & LLMs   | 4 | O
-AIDS-405   | Cloud Computing & Microservices      | 3 | A+
-AIDS-407   | Document AI & Workflow Automation    | 4 | O
-AIDS-451   | Minor Project Evaluation I           | 4 | O
+CS-401      | Deep Learning & Neural Architectures | 4 | A+
+CS-403      | Natural Language Processing & LLMs   | 4 | O
+CS-405      | Cloud Computing & Microservices      | 3 | A+
+CS-407      | Document AI & Workflow Automation    | 4 | O
+CS-451      | Autonomous Systems Capstone          | 4 | O
 
 Semester SGPA: 9.20
-Cumulative CGPA: 8.85
+Cumulative CGPA: 9.15
 Result: Passed with Distinction`,
   },
   {
@@ -1094,19 +1231,19 @@ Result: Passed with Distinction`,
     badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
     filename: 'Sample_Prescription_Apollo.txt',
     text: `APOLLO HOSPITALS ENTERPRISE LTD.
-Department of Cardiology & Internal Medicine
+Hospital: Apollo Specialty Hospital, Sarita Vihar, Delhi Mathura Road, New Delhi - 110076
+Date: 2026-11-15
 PRESCRIPTION & CLINICAL SUMMARY
 
-Date: 2026-11-15
 Patient Name: Rajesh Sharma
-Age: 52 | Gender: Male
+Age: 52 years / Male
 Patient ID: MED-2026-77821
-Doctor: Dr. Arvind Mehra, MD (Cardiology)
+Doctor: Dr. Arvind Mehra, MD (Cardiology) - DMC Reg. No. 48821
 
 Diagnosis: Primary Hypertension & Mild Dyslipidemia
 Vitals: BP: 142/90 mmHg | Pulse: 78 bpm | SpO2: 98%
 
-Rx (Prescription):
+Rx:
 1. Tab. Telmisartan 40mg - 1 tab once daily in morning (30 days)
 2. Tab. Atorvastatin 10mg - 1 tab once daily at bedtime (30 days)
 
@@ -1121,18 +1258,67 @@ CONFIDENTIAL MEDICAL RECORD - PROTECTED HEALTH INFORMATION (PHI)`,
     badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
     filename: 'Sample_Mutual_NDA_Legal.txt',
     text: `MUTUAL NON-DISCLOSURE AND CONFIDENTIALITY AGREEMENT
+Effective Date: 2026-11-10
 
-This Mutual Non-Disclosure Agreement is entered into on 2026-11-10, by and between:
-Party A: DocuBrix Technologies Pvt. Ltd., New Delhi, India; and
-Party B: Horizon Ventures Inc., San Francisco, CA, USA.
+This Mutual Non-Disclosure Agreement is entered into on 2026-11-10, between:
+Disclosing Party: DocuBrix Technologies Pvt. Ltd., Barakhamba Road, Connaught Place, New Delhi - 110001
+Receiving Party: Horizon Ventures India Pvt. Ltd., Cyber City, Gurugram, Delhi-NCR - 122002
 
 1. Purpose: Strategic evaluation of document intelligence and workflow automation systems.
 2. Confidential Information: Technical designs, algorithms, architectures, and proprietary models.
-3. Term: The non-disclosure obligations shall survive for three (3) years from the Effective Date.
-4. Governing Law: This Agreement shall be construed in accordance with Delaware law.
+Term: The non-disclosure obligations shall survive for three (3) years from the Effective Date.
+Governing Law: This Agreement shall be governed by and construed in accordance with the laws of India, and the parties submit to the exclusive jurisdiction of the Courts at New Delhi.
 
-Signed for Party A: Pranav Bisht, Lead Engineer
-Signed for Party B: Marcus Vance, Managing Partner`,
+Signed for Disclosing Party: Alex Morgan, Lead Engineer
+Signed for Receiving Party: Marcus Vance, Managing Partner`,
+  },
+  {
+    id: 'administrative',
+    label: 'Official Executive Notice',
+    icon: '📋',
+    badge: 'Administrative',
+    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
+    filename: 'Sample_Official_Notice.txt',
+    text: `CENTRAL REGISTRATION & ADMINISTRATIVE SECRETARIAT
+OFFICE OF THE REGISTRAR / GENERAL ADMINISTRATION
+Sector 4, Business District, New Delhi - 110001
+OFFICE MEMORANDUM / OFFICIAL NOTICE
+
+Reference No: ADM/GA/2026/NOT-881
+Date: 2026-09-08
+Subject: Autonomous Examination Scheduling & Project Review Timetable
+
+To: All Department Directors, Senior Leads, and Operational Managers
+In accordance with executive operational guidelines, the Administrative Council has approved the updated scheduling timetable and operational review guidelines. All departments shall comply with immediate effect.
+By Order of the Competent Authority
+Registrar / Joint Secretary`,
+  },
+  {
+    id: 'general',
+    label: 'Candidate Software Resume',
+    icon: '💼',
+    badge: 'General',
+    badgeClass: 'bg-slate-50 text-slate-700 border-slate-200',
+    filename: 'Sample_Candidate_Resume.txt',
+    text: `ALEX MORGAN
+Location: New Delhi, India | Email: alex.morgan@example.com | Phone: +91 98101 23456
+GitHub: github.com/alexmorgan-dev | LinkedIn: linkedin.com/in/alexmorgan
+
+PROFESSIONAL SUMMARY
+Full Stack Software Engineer with expertise in building FastAPI microservices, React single-page applications, and document intelligence workflows.
+
+TECHNICAL SKILLS
+Languages: Python, JavaScript, TypeScript, SQL
+Frameworks & Tools: FastAPI, React 18, Vite, TailwindCSS, PyTorch, Scikit-learn, PostgreSQL, Docker
+
+WORK EXPERIENCE
+Software Engineering Intern — Cloud Automation Labs (2025 - Present)
+• Built intelligent document extraction services handling multi-format inputs.
+• Implemented JWT token security with role-based access control.
+
+EDUCATION
+Bachelor of Technology in Computer Science & Automation, New Delhi
+CGPA: 8.85 / 10.0 (2022 - 2026)`,
   },
 ]
 
@@ -1216,7 +1402,7 @@ function ProcessingPage() {
             <span className="text-xs text-slate-500">Click any preset to test end-to-end OCR and workflow triggers</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {DEMO_PRESETS.map((preset) => (
               <button
                 key={preset.id}
@@ -1284,26 +1470,39 @@ function ProcessingPage() {
             <StatCard
               label="Type"
               value={documentResult.document_type || 'unknown'}
-              hint={documentResult.classification?.method === 'ml' ? 'ML Classifier' : 'Rule Heuristic'}
+              hint={documentResult.category || (documentResult.classification && documentResult.classification.category) || 'Domain'}
               accent="green"
             />
             <StatCard label="Status" value={documentResult.status || 'processed'} hint="Workflow" accent="slate" />
-            <StatCard label="Confidence" value={safeFloat((documentResult.confidence || {}).overall) ? `${safeFloat((documentResult.confidence || {}).overall).toFixed(2)}` : 'N/A'} hint="Overall" accent="amber" />
+            <StatCard
+              label="Confidence"
+              value={typeof documentResult.classification?.confidence === 'number' ? `${(documentResult.classification.confidence * 100).toFixed(0)}%` : (safeFloat((documentResult.confidence || {}).overall) ? `${safeFloat((documentResult.confidence || {}).overall).toFixed(2)}` : 'N/A')}
+              hint={documentResult.classification?.method === 'ml' ? 'ML Model' : 'Overall Quality'}
+              accent="amber"
+            />
           </div>
 
           <div className="grid gap-8 xl:grid-cols-[1.3fr_0.7fr]">
             <Card>
-              <CardHeader>
-                <CardTitle>Extracted information</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <span>Extracted information</span>
+                  <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full border', categoryColors[documentResult.category || (documentResult.extracted_fields || {}).category || 'General'] || categoryColors.General)}>
+                    {documentResult.category || (documentResult.extracted_fields || {}).category || 'General'}
+                  </span>
+                </CardTitle>
+                <ClassificationBadge classification={documentResult.classification} documentType={documentResult.document_type} />
               </CardHeader>
               <CardContent>
                 <div className="field-grid">
-                  {Object.entries(documentResult.extracted_fields || {}).filter(([key]) => key !== 'document_type').map(([key, value]) => (
-                    <div key={key} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{key.replace('_', ' ')}</div>
-                      <div className="mt-2 text-sm font-medium text-slate-900">{value || 'Not available'}</div>
-                    </div>
-                  ))}
+                  {Object.entries(documentResult.extracted_fields || {})
+                    .filter(([key]) => key !== 'document_type' && key !== 'category')
+                    .map(([key, value]) => (
+                      <div key={key} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{key.replace(/_/g, ' ')}</div>
+                        <div className="mt-2 text-sm font-medium text-slate-900 break-words">{value || <span className="text-slate-400 font-normal italic">Not available</span>}</div>
+                      </div>
+                    ))}
                 </div>
               </CardContent>
             </Card>
@@ -1335,7 +1534,7 @@ function ProcessingPage() {
                 {Object.entries((documentResult.confidence || {}).signals || {}).map(([key, value]) => (
                   <div key={key}>
                     <div className="mb-1 flex items-center justify-between text-sm">
-                      <span className="font-medium text-slate-700">{key.replace('_', ' ')}</span>
+                      <span className="font-medium text-slate-700 capitalize">{key.replace(/_/g, ' ')}</span>
                       <span className="text-slate-500">{safeFloat(value)?.toFixed(2) || '0.00'}</span>
                     </div>
                     <div className="h-2.5 rounded-full bg-slate-200">
@@ -1353,7 +1552,7 @@ function ProcessingPage() {
               <CardContent className="space-y-4">
                 {Object.entries(manualFields).map(([key, value]) => (
                   <div key={key}>
-                    <label className="mb-1.5 block text-sm font-medium text-slate-700">{key.replace('_', ' ')}</label>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700 capitalize">{key.replace(/_/g, ' ')}</label>
                     <Input value={value || ''} onChange={(event) => setManualFields((current) => ({ ...current, [key]: event.target.value }))} />
                   </div>
                 ))}
@@ -1383,6 +1582,7 @@ function LibraryPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchMode, setSearchMode] = useState('keyword')
+  const [categoryFilter, setCategoryFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [searchStatus, setSearchStatus] = useState(null)
@@ -1439,17 +1639,20 @@ function LibraryPage() {
   }, [searchQuery, searchMode, typeFilter, statusFilter, searchStatus])
 
   const filteredDocuments = documents.filter((item) => {
+    const itemCat = item.category || (item.extracted_fields || {}).category || (item.classification && item.classification.category) || 'General'
+    const catMatch = categoryFilter === 'all' || itemCat === categoryFilter
     const typeMatch = typeFilter === 'all' || (item.document_type || 'unknown') === typeFilter
     const statusMatch = statusFilter === 'all' || (item.status || 'unknown') === statusFilter
-    return typeMatch && statusMatch
+    return catMatch && typeMatch && statusMatch
   })
 
   const uniqueTypes = ['all', ...new Set(documents.map((item) => item.document_type || 'unknown'))]
   const uniqueStatuses = ['all', ...new Set(documents.map((item) => item.status || 'unknown'))]
+  const uniqueCategories = ['all', 'Financial', 'Academic', 'Legal', 'Medical', 'Administrative', 'General']
 
   return (
     <>
-      <PageHeader title="Document Library" subtitle="Search, filter, and inspect the full document corpus." />
+      <PageHeader title="Document Library" subtitle="Search, filter, and inspect the full document corpus across all domains." />
 
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-soft">
         <span className="font-semibold text-slate-700">Capabilities:</span>
@@ -1482,8 +1685,8 @@ function LibraryPage() {
         )}
       </div>
 
-      <div className="mb-6 grid gap-4 md:grid-cols-2">
-        <div className="md:col-span-2">
+      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        <div className="sm:col-span-3">
           <div className="mb-1.5 flex items-center justify-between">
             <label className="text-sm font-medium text-slate-700">Search documents</label>
             <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs">
@@ -1540,18 +1743,26 @@ function LibraryPage() {
           )}
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">Document type</label>
-          <Select value={typeFilter} onValueChange={setTypeFilter} placeholder="Filter by type">
-            {uniqueTypes.map((item) => (
-              <SelectItem key={item} value={item}>{item === 'all' ? 'All types' : item}</SelectItem>
+          <label className="mb-1.5 block text-sm font-medium text-slate-700">Domain category</label>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter} placeholder="Filter by domain">
+            {uniqueCategories.map((item) => (
+              <SelectItem key={item} value={item}>{item === 'all' ? 'All domains' : item}</SelectItem>
             ))}
           </Select>
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">Status</label>
+          <label className="mb-1.5 block text-sm font-medium text-slate-700">Document type</label>
+          <Select value={typeFilter} onValueChange={setTypeFilter} placeholder="Filter by type">
+            {uniqueTypes.map((item) => (
+              <SelectItem key={item} value={item}>{item === 'all' ? 'All types' : item.replace(/_/g, ' ')}</SelectItem>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-slate-700">Workflow status</label>
           <Select value={statusFilter} onValueChange={setStatusFilter} placeholder="Filter by status">
             {uniqueStatuses.map((item) => (
-              <SelectItem key={item} value={item}>{item === 'all' ? 'All statuses' : item}</SelectItem>
+              <SelectItem key={item} value={item}>{item === 'all' ? 'All statuses' : item.replace(/_/g, ' ')}</SelectItem>
             ))}
           </Select>
         </div>
@@ -1570,6 +1781,7 @@ function LibraryPage() {
               <thead className="bg-slate-50 text-left text-slate-600">
                 <tr>
                   <th className="px-4 py-3">Filename</th>
+                  <th className="px-4 py-3">Domain</th>
                   <th className="px-4 py-3">Classification</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">
@@ -1580,34 +1792,42 @@ function LibraryPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {filteredDocuments.map((document) => (
-                  <tr key={document.document_id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-900">
-                      <div>{document.filename}</div>
-                      {document.excerpts && document.excerpts.length > 0 && (
-                        <div
-                          className="mt-1 text-xs font-normal text-slate-500 max-w-md line-clamp-2 [&>mark]:bg-amber-100 [&>mark]:text-amber-900 [&>mark]:rounded [&>mark]:px-0.5"
-                          dangerouslySetInnerHTML={{ __html: document.excerpts[0] }}
-                        />
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <ClassificationBadge classification={document.classification} documentType={document.document_type} />
-                    </td>
-                    <td className="px-4 py-3"><Badge variant={statusColors[document.status] || 'muted'}>{document.status || 'unknown'}</Badge></td>
-                    <td className="px-4 py-3">
-                      {typeof document.similarity === 'number' ? (
-                        <Badge variant="default" className="bg-purple-50 text-purple-700 border border-purple-200">
-                          Sim: {(document.similarity * 100).toFixed(1)}%
-                        </Badge>
-                      ) : (
-                        <span>{safeFloat((document.confidence || {}).overall)?.toFixed(2) || 'N/A'}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">{formatDate(document.upload_time)}</td>
-                    <td className="px-4 py-3"><Link className="font-medium text-blue-700 hover:underline" to={`/documents/${document.document_id}`}>Open</Link></td>
-                  </tr>
-                ))}
+                {filteredDocuments.map((document) => {
+                  const docCat = document.category || (document.extracted_fields || {}).category || (document.classification && document.classification.category) || 'General'
+                  return (
+                    <tr key={document.document_id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-medium text-slate-900">
+                        <div>{document.filename}</div>
+                        {document.excerpts && document.excerpts.length > 0 && (
+                          <div
+                            className="mt-1 text-xs font-normal text-slate-500 max-w-md line-clamp-2 [&>mark]:bg-amber-100 [&>mark]:text-amber-900 [&>mark]:rounded [&>mark]:px-0.5"
+                            dangerouslySetInnerHTML={{ __html: document.excerpts[0] }}
+                          />
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold', categoryColors[docCat] || categoryColors.General)}>
+                          {docCat}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <ClassificationBadge classification={document.classification} documentType={document.document_type} />
+                      </td>
+                      <td className="px-4 py-3"><Badge variant={statusColors[document.status] || 'muted'}>{(document.status || 'unknown').replace(/_/g, ' ')}</Badge></td>
+                      <td className="px-4 py-3">
+                        {typeof document.similarity === 'number' ? (
+                          <Badge variant="default" className="bg-purple-50 text-purple-700 border border-purple-200">
+                            Sim: {(document.similarity * 100).toFixed(1)}%
+                          </Badge>
+                        ) : (
+                          <span>{safeFloat((document.confidence || {}).overall)?.toFixed(2) || 'N/A'}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">{formatDate(document.upload_time)}</td>
+                      <td className="px-4 py-3"><Link className="font-medium text-blue-700 hover:underline" to={`/documents/${document.document_id}`}>Open</Link></td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}
@@ -1811,7 +2031,7 @@ function ChatPage() {
     } catch (err) {
       const status = err.response?.status
       const detail = err.response?.data?.detail || err.message || 'An error occurred while communicating with DocuBrix AI.'
-      if (status === 503) {
+      if (status === 503 && (detail.toLowerCase().includes('not configured') || detail.toLowerCase().includes('gemini_api_key'))) {
         setChatError('DocuBrix AI Assistant is offline because GEMINI_API_KEY is not configured on the backend.')
       } else {
         setChatError(detail)
@@ -2105,7 +2325,7 @@ function ChatPage() {
                   <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900 flex items-start gap-2.5">
                     <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                     <div>
-                      <div className="font-semibold">Assistant Unavailable</div>
+                      <div className="font-semibold">Assistant Notice</div>
                       <div className="mt-0.5 leading-relaxed">{chatError}</div>
                     </div>
                   </div>
@@ -2405,16 +2625,24 @@ function DocumentDetailPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
         <Card>
-          <CardHeader>
-            <CardTitle>Extracted fields</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <span>Extracted fields</span>
+              <span className={cn('text-xs font-semibold px-2.5 py-0.5 rounded-full border', categoryColors[document.category || (document.extracted_fields || {}).category || 'General'] || categoryColors.General)}>
+                {document.category || (document.extracted_fields || {}).category || 'General'}
+              </span>
+            </CardTitle>
+            <ClassificationBadge classification={document.classification} documentType={document.document_type} />
           </CardHeader>
           <CardContent>
             <div className="field-grid">
-              {Object.entries(document.extracted_fields || {}).filter(([key]) => key !== 'document_type').map(([key, value]) => (
-                <div key={key} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{key.replace('_', ' ')}</div>
-                  <div className="mt-2 text-sm font-medium text-slate-900">{value || 'Not available'}</div>
-                </div>
+              {Object.entries(document.extracted_fields || {})
+                .filter(([key]) => key !== 'document_type' && key !== 'category')
+                .map(([key, value]) => (
+                  <div key={key} className="rounded-xl border border-slate-200 bg-slate-50 p-3 hover:border-slate-300 transition-colors">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{key.replace(/_/g, ' ')}</div>
+                    <div className="mt-1.5 text-sm font-semibold text-slate-900 break-words">{value || <span className="text-slate-400 font-normal italic">Not available</span>}</div>
+                  </div>
               ))}
             </div>
           </CardContent>
@@ -2422,24 +2650,32 @@ function DocumentDetailPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Metadata</CardTitle>
+            <CardTitle>Metadata & Classification</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-slate-700">
             <div className="flex justify-between items-center">
+              <span>Domain category</span>
+              <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold', categoryColors[document.category || (document.extracted_fields || {}).category || 'General'] || categoryColors.General)}>
+                {document.category || (document.extracted_fields || {}).category || 'General'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
               <span>Document type</span>
-              <span className="font-medium text-slate-900 capitalize">{document.document_type || 'unknown'}</span>
+              <span className="font-semibold text-slate-900 capitalize">{(document.document_type || 'unknown').replace(/_/g, ' ')}</span>
             </div>
             <div className="flex justify-between items-center">
               <span>Classification</span>
               <ClassificationBadge classification={document.classification} documentType={document.document_type} />
             </div>
             <div className="flex justify-between items-center">
-              <span>Model</span>
-              <span className="font-mono text-xs text-slate-800">{document.classification?.model || 'None (Heuristic)'}</span>
+              <span>Model engine</span>
+              <span className="font-mono text-xs text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                {document.classification?.model || 'tfidf-logistic-regression:1.0.0'}
+              </span>
             </div>
             <div className="flex justify-between items-center">
               <span>Model confidence</span>
-              <span className="font-medium text-slate-900">
+              <span className="font-semibold text-indigo-700">
                 {typeof document.classification?.confidence === 'number'
                   ? `${(document.classification.confidence * 100).toFixed(1)}%`
                   : 'N/A (Heuristic)'}
@@ -2447,19 +2683,52 @@ function DocumentDetailPage() {
             </div>
             <div className="flex justify-between items-center">
               <span>Status</span>
-              <Badge variant={statusColors[document.status] || 'muted'}>{document.status || 'unknown'}</Badge>
+              <Badge variant={statusColors[document.status] || 'muted'}>{(document.status || 'unknown').replace(/_/g, ' ')}</Badge>
             </div>
             <div className="flex justify-between items-center">
               <span>Uploaded</span>
               <span className="font-medium text-slate-900">{formatDate(document.upload_time)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span>Extraction confidence</span>
-              <span className="font-medium text-slate-900">{safeFloat((document.confidence || {}).overall)?.toFixed(2) || 'N/A'}</span>
+              <span>Quality score</span>
+              <span className="font-medium text-emerald-700">{safeFloat((document.confidence || {}).overall)?.toFixed(2) || 'N/A'}</span>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {document.workflow && (
+        <Card className="mt-6">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Sliders className="h-4 w-4 text-blue-600" />
+              <span>Automated Workflow Evaluation</span>
+            </CardTitle>
+            <Badge variant={statusColors[document.workflow.final_status] || 'default'}>
+              Workflow Status: {(document.workflow.final_status || document.status || '').replace(/_/g, ' ')}
+            </Badge>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs">
+            {document.workflow.triggered_rules && document.workflow.triggered_rules.length > 0 ? (
+              <div className="space-y-2">
+                {document.workflow.triggered_rules.map((rule, idx) => (
+                  <div key={idx} className="flex items-start justify-between rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                    <div>
+                      <div className="font-semibold text-slate-800">{rule.name || rule.rule_id}</div>
+                      <div className="text-slate-500 mt-0.5">{rule.description || 'Workflow rule condition evaluated successfully.'}</div>
+                    </div>
+                    <Badge variant="warning" className="shrink-0 text-[10px]">
+                      {(rule.target_status || 'flagged').replace(/_/g, ' ')}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-slate-500 py-1">No special risk thresholds triggered; automated standard path applied.</div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <DocumentQAPanel documentId={documentId} filename={document.filename} searchStatus={searchStatus} />
 
@@ -2469,11 +2738,13 @@ function DocumentDetailPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="field-grid">
-            {Object.entries(corrections).filter(([key]) => key !== 'document_type').map(([key, value]) => (
-              <div key={key}>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">{key.replace('_', ' ')}</label>
-                <Input value={value || ''} onChange={(event) => setCorrections((current) => ({ ...current, [key]: event.target.value }))} />
-              </div>
+            {Object.entries(corrections)
+              .filter(([key]) => key !== 'document_type' && key !== 'category')
+              .map(([key, value]) => (
+                <div key={key}>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">{key.replace(/_/g, ' ')}</label>
+                  <Input value={value || ''} onChange={(event) => setCorrections((current) => ({ ...current, [key]: event.target.value }))} />
+                </div>
             ))}
           </div>
           <Button onClick={handleSaveCorrections} disabled={saving}>{saving ? 'Saving...' : 'Save corrections'}</Button>

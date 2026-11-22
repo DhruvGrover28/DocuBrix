@@ -490,3 +490,24 @@ def test_diagnostic_logging_response_parsing_error(monkeypatch: pytest.MonkeyPat
     assert len(parse_records) >= 1
     assert "JSONDecodeError" in parse_records[0].message or "Failed to decode" in parse_records[0].message
 
+
+def test_conversational_greeting_and_extractive_fallback() -> None:
+    from backend.app.services.knowledge import is_conversational_greeting, generate_extractive_fallback
+
+    assert is_conversational_greeting("hi") is True
+    assert is_conversational_greeting("Hello there!") is True
+    assert is_conversational_greeting("what can you do?") is True
+    assert is_conversational_greeting("What is the invoice total?") is False
+
+    greeting_res = generate_extractive_fallback("hi", [])
+    assert "DocuBrix AI Assistant" in greeting_res
+
+    empty_res = generate_extractive_fallback("What is the vendor name?", [])
+    assert "no relevant content" in empty_res.lower()
+
+    sources = [{"filename": "invoice_101.pdf", "chunk_index": 0, "content": "Total: $500"}]
+    doc_res = generate_extractive_fallback("What is the total?", sources)
+    assert "invoice_101.pdf" in doc_res
+    assert "Total: $500" in doc_res
+
+

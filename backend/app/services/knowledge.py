@@ -550,3 +550,47 @@ def generate_chat_answer(
         )
         raise RuntimeError("The configured Gemini service returned no grounded answer.")
     return answer
+
+
+def is_conversational_greeting(text: str) -> bool:
+    """Return True if the user input is a casual conversational greeting or general capability query."""
+    clean = re.sub(r"[^\w\s]", "", (text or "").strip().lower())
+    greetings = {
+        "hi", "hello", "hey", "hola", "greetings", "good morning",
+        "good evening", "good afternoon", "who are you", "what can you do", "help", "test"
+    }
+    return clean in greetings or clean.startswith(("hi ", "hello ", "hey ", "help "))
+
+
+def generate_extractive_fallback(question: str, sources: list[dict[str, Any]]) -> str:
+    """
+    Deterministic grounded fallback when cloud generative LLM is rate-limited (429),
+    offline, or unconfigured. Formats retrieved chunks directly with source citations.
+    """
+    if is_conversational_greeting(question):
+        return (
+            "Hello! I am DocuBrix AI Assistant, your intelligent document lifecycle and analytics assistant.\n\n"
+            "I can help you search, summarize, extract information, and answer questions across all your uploaded documents "
+            "(financial invoices, tax receipts, medical prescriptions, legal agreements, and academic transcripts).\n\n"
+            "Feel free to ask me about specific payment amounts, dates, vendor details, or compliance requirements!"
+        )
+
+    if not sources:
+        return (
+            f"I searched your workspace across all indexed documents, but no relevant content matching '{question}' was found.\n\n"
+            "Please ensure you have uploaded documents in the Document Processing section so I can analyze them for you."
+        )
+
+    parts = [
+        "Based on your uploaded documents, here is the relevant extracted information:\n"
+    ]
+    for idx, s in enumerate(sources, 1):
+        filename = s.get("filename", "Document")
+        chunk_idx = s.get("chunk_index", 0)
+        content = s.get("content", "").strip()
+        snippet = content[:350] + ("..." if len(content) > 350 else "")
+        parts.append(f"• **[{filename} — chunk {chunk_idx}]**\n  > {snippet}\n")
+
+    parts.append("*(Note: Response grounded directly in verified workspace document chunks)*")
+    return "\n".join(parts)
+

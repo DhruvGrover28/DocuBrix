@@ -9,19 +9,26 @@ from pathlib import Path
 from typing import Any
 
 DOCUMENT_CATEGORY_MAP: dict[str, str] = {
+    # Financial
     "invoice": "Financial",
     "receipt": "Financial",
     "bank_statement": "Financial",
     "salary_slip": "Financial",
+    "other_financial_document": "Financial",
+    # Academic
     "academic_transcript": "Academic",
     "academic_certificate": "Academic",
+    # Legal
     "legal_contract": "Legal",
     "non_disclosure_agreement": "Legal",
+    # Medical
     "medical_prescription": "Medical",
     "medical_lab_report": "Medical",
+    # Administrative
     "identity_document": "Administrative",
     "official_notice": "Administrative",
-    "other_financial_document": "Financial",
+    # General
+    "other_document": "General",
     "unknown": "General",
 }
 
@@ -31,6 +38,7 @@ class ClassificationResult:
     document_type: str
     category: str = "General"
     method: str = "heuristic_fallback"
+    model: str | None = None
     model_name: str | None = None
     model_version: str | None = None
     confidence: float | None = None
@@ -39,7 +47,10 @@ class ClassificationResult:
     scores: dict[str, float] | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        if not data.get("model") and self.model_name:
+            data["model"] = f"{self.model_name}:{self.model_version}" if self.model_version else self.model_name
+        return data
 
 
 MARKERS: dict[str, tuple[str, ...]] = {
@@ -107,6 +118,11 @@ MARKERS: dict[str, tuple[str, ...]] = {
         "reference no", "to all staff", "order no", "competent authority", "issued by",
         "gazette notification", "administrative order",
     ),
+    "other_document": (
+        "curriculum vitae", "resume", "work experience", "professional summary",
+        "technical skills", "projects & certifications", "hiring manager", "dear hiring",
+        "sincerely", "cover letter", "to whom it may concern", "job application",
+    ),
 }
 
 ANCHORS: dict[str, list[str]] = {
@@ -122,6 +138,11 @@ ANCHORS: dict[str, list[str]] = {
     "medical_lab_report": [r"\b(?:lab(?:oratory)?\s*report|pathology|reference\s*(?:range|interval))\b"],
     "identity_document": [r"\b(?:identity\s*card|passport|driving\s*licen[sc]e|voter\s*id)\b", r"\bdate\s*of\s*birth\b"],
     "official_notice": [r"\b(?:office\s*memorandum|circular|official\s*notice)\b"],
+    "other_document": [
+        r"\b(?:curriculum\s*vitae|resume|c\.?v\.?)\b",
+        r"\b(?:professional\s*summary|work\s*experience|technical\s*skills)\b",
+        r"\b(?:dear\s*(?:hiring|team|mr\.|ms\.)|to\s*whom\s*it\s*may\s*concern)\b",
+    ],
 }
 
 
@@ -161,11 +182,30 @@ def _heuristic_label_and_confidence(raw_text: str) -> tuple[str, str, float, dic
         if "transcript" not in normalized and "marksheet" not in normalized:
             raw_scores["official_notice"] += 2.0
 
+    # Disambiguate resumes, CVs, and cover letters to prevent misclassification as salary slip / financial
+    resume_indicators = ("curriculum vitae", "resume", "work experience", "technical skills", "professional summary", "projects & certifications")
+    financial_core = ("invoice no", "amount due", "bill to", "tax invoice", "subtotal", "payment received", "ending balance", "net salary", "gross pay", "payslip")
+    if any(ind in normalized for ind in resume_indicators) and not any(fc in normalized for fc in financial_core):
+        raw_scores["other_document"] += 8.0
+        raw_scores["salary_slip"] = 0.0
+        raw_scores["invoice"] = 0.0
+        raw_scores["receipt"] = 0.0
+
     best_type = max(raw_scores, key=raw_scores.get)
     best_score = raw_scores[best_type]
 
     if best_score < 2.5:
-        return "other_financial_document", "Financial", 0.50, raw_scores
+        # Check if financial terminology is present to distinguish financial vs general documents
+        financial_patterns = [
+            r"\b(?:revenue|earnings|operating\s*income|ebitda|balance\s*sheet|cash\s*flow|dividend|equity)\b",
+            r"\b(?:fiscal\s*year|fiscal\s*quarter|financial\s*(?:report|results?|summary|disclosure))\b",
+            r"\b(?:investor\s*relations|shareholder|board\s*(?:financial|finance)|annual\s*report)\b",
+            r"\bq[1-4]\s*(?:earnings|revenue|financial|fiscal)\b",
+        ]
+        is_financial = any(re.search(pat, normalized, re.IGNORECASE) for pat in financial_patterns)
+        if is_financial:
+            return "other_financial_document", "Financial", 0.50, raw_scores
+        return "other_document", "General", 0.50, raw_scores
 
     total_positive = sum(s for s in raw_scores.values() if s > 0)
     score_ratio = best_score / total_positive if total_positive > 0 else 0.5
@@ -180,7 +220,19 @@ def _heuristic_label(raw_text: str) -> str:
     return best_type
 
 
-def _load_model(path: Path) -> dict[str, Any] | None:
+_CACHED_MODEL: dict[str, Any] | None = None
+_CACHED_MODEL_PATH: str | None = None
+_CACHED_MODEL_MTIME: float | None = None
+
+
+def _load_model(path: Path | str | None = None) -> dict[str, Any] | None:
+    global _CACHED_MODEL, _CACHED_MODEL_PATH, _CACHED_MODEL_MTIME
+
+    if path is None:
+        path = Path(os.getenv("DOCUBRIX_CLASSIFIER_PATH", "backend/models/document_classifier.pkl"))
+    elif isinstance(path, str):
+        path = Path(path)
+
     resolved = path
     if not resolved.is_absolute():
         try:
@@ -188,16 +240,39 @@ def _load_model(path: Path) -> dict[str, Any] | None:
             resolved = BASE_DIR / resolved
         except Exception:
             resolved = Path.cwd() / resolved
+
     if not resolved.exists():
+        _CACHED_MODEL = None
+        _CACHED_MODEL_PATH = None
+        _CACHED_MODEL_MTIME = None
         return None
+
     try:
+        current_mtime = resolved.stat().st_mtime
+        resolved_str = str(resolved)
+        if (
+            _CACHED_MODEL is not None
+            and _CACHED_MODEL_PATH == resolved_str
+            and _CACHED_MODEL_MTIME == current_mtime
+        ):
+            return _CACHED_MODEL
+
         with resolved.open("rb") as model_file:
             artifact = pickle.load(model_file)
         if not isinstance(artifact, dict) or not {"vectorizer", "classifier"}.issubset(artifact):
             return None
+
+        _CACHED_MODEL = artifact
+        _CACHED_MODEL_PATH = resolved_str
+        _CACHED_MODEL_MTIME = current_mtime
         return artifact
     except (OSError, pickle.PickleError, ValueError, ImportError, AttributeError, EOFError, KeyError):
         return None
+
+
+def load_classifier_model(path: Path | str | None = None) -> dict[str, Any] | None:
+    """Explicitly load or reload the classifier model artifact."""
+    return _load_model(path)
 
 
 def classify_document_result(raw_text: str) -> ClassificationResult:
@@ -208,6 +283,7 @@ def classify_document_result(raw_text: str) -> ClassificationResult:
             document_type="unknown",
             category="General",
             method="unknown",
+            model=None,
             model_name=None,
             model_version=None,
             confidence=None,
@@ -226,29 +302,52 @@ def classify_document_result(raw_text: str) -> ClassificationResult:
             vector = vectorizer.transform([cleaned])
             predicted_label = str(classifier.predict(vector)[0])
             confidence = None
+            scores: dict[str, float] = {}
             if hasattr(classifier, "predict_proba"):
                 probabilities = classifier.predict_proba(vector)[0]
                 confidence = round(float(max(probabilities)), 4)
+                if hasattr(classifier, "classes_"):
+                    scores = {
+                        str(cls_name): round(float(prob), 4)
+                        for cls_name, prob in zip(classifier.classes_, probabilities)
+                    }
+
+            # Guardrail: prevent non-financial documents (e.g., resumes, cover letters) from being misclassified as Financial
+            normalized = cleaned.lower()
+            resume_markers = ("curriculum vitae", "resume", "professional summary", "work experience", "technical skills", "projects & certifications")
+            financial_core = ("invoice no", "amount due", "bill to", "tax invoice", "subtotal", "payment received", "ending balance", "net salary", "gross pay", "payslip")
+            if predicted_label in ("invoice", "receipt", "bank_statement", "salary_slip", "other_financial_document"):
+                if any(m in normalized for m in resume_markers) and not any(f in normalized for f in financial_core):
+                    predicted_label = "other_document"
+                    confidence = scores.get("other_document", 0.92)
+
+            model_name = str(artifact.get("model_name", "tfidf-logistic-regression"))
+            model_ver = str(artifact.get("model_version", "1.0.0"))
+            full_model_tag = f"{model_name}:{model_ver}"
             cat = DOCUMENT_CATEGORY_MAP.get(predicted_label, "General")
+
             return ClassificationResult(
                 document_type=predicted_label,
                 category=cat,
                 method="ml",
-                model_name=str(artifact.get("model_name", "tfidf-logistic-regression")),
-                model_version=str(artifact.get("model_version", "1.0.0")),
+                model=full_model_tag,
+                model_name=model_name,
+                model_version=model_ver,
                 confidence=confidence,
                 status="classified",
                 classified_at=timestamp,
+                scores=scores if scores else None,
             )
         except Exception:
             pass
 
     heuristic, category, _, raw_scores = _heuristic_label_and_confidence(cleaned)
-    status = "fallback" if heuristic != "other_financial_document" else "fallback_unmatched"
+    status = "fallback" if heuristic not in ("other_financial_document", "other_document") else "fallback_unmatched"
     return ClassificationResult(
         document_type=heuristic,
         category=category,
         method="heuristic_fallback",
+        model=None,
         model_name=None,
         model_version=None,
         confidence=None,

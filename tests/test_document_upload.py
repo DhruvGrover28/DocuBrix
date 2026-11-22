@@ -129,3 +129,48 @@ def test_upload_and_background_embedding_sqlite(monkeypatch) -> None:
     with TestSession() as session:
         chunks = session.query(DocumentChunk).filter(DocumentChunk.document_id == doc_id).all()
         assert chunks[0].embedding == [0.11, 0.22, 0.33]
+
+
+def test_upload_upsert_deduplication(monkeypatch) -> None:
+    from fastapi import BackgroundTasks, UploadFile
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from backend.app.db.database import Base
+    from backend.app.models.user import User
+    from backend.app.models.document import Document, DocumentChunk
+    from backend.app.main import upload_document
+
+    test_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=test_engine)
+    TestSession = sessionmaker(bind=test_engine)
+
+    monkeypatch.setattr("backend.app.main.SessionLocal", TestSession)
+
+    user_id = str(uuid.uuid4())
+    user = User(id=user_id, name="Upsert Tester", email="upsert@example.com", role="user")
+
+    # 1. First upload
+    f1 = UploadFile(filename="quarterly_report.txt", file=io.BytesIO(b"Vendor: Acme 1\nTotal: $100"))
+    r1 = upload_document(background_tasks=BackgroundTasks(), file=f1, user=user)
+    doc_id_1 = r1["document_id"]
+
+    with TestSession() as s:
+        assert s.query(Document).filter(Document.owner_id == user_id).count() == 1
+
+    # 2. Second upload with SAME filename: updates in place
+    f2 = UploadFile(filename="quarterly_report.txt", file=io.BytesIO(b"Vendor: Acme 2\nTotal: $200"))
+    r2 = upload_document(background_tasks=BackgroundTasks(), file=f2, user=user)
+    doc_id_2 = r2["document_id"]
+
+    assert doc_id_1 == doc_id_2
+    with TestSession() as s:
+        # Still only 1 document in DB, not 2
+        assert s.query(Document).filter(Document.owner_id == user_id).count() == 1
+        updated = s.query(Document).filter(Document.id == doc_id_1).first()
+        assert "Acme 2" in updated.raw_text
+

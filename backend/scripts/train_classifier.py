@@ -24,6 +24,10 @@ SUPPORTED_LABELS: set[str] = {
     "bank_statement",
     "salary_slip",
     "other_financial_document",
+    # Professional & Career (new)
+    "resume_cv",
+    "cover_letter",
+    "job_description",
     # Academic
     "academic_transcript",
     "academic_certificate",
@@ -36,6 +40,8 @@ SUPPORTED_LABELS: set[str] = {
     # Administrative
     "identity_document",
     "official_notice",
+    # Business & Commercial (new)
+    "purchase_order",
     # General
     "other_document",
 }
@@ -397,67 +403,137 @@ def generate_synthetic_dataset(samples_per_class: int = 45) -> list[dict[str, st
         )
         data.append({"text": text, "label": "official_notice"})
 
-    # 13. OTHER DOCUMENT (General - Resumes, Cover Letters, General correspondence)
+    # 13a. RESUME / CV
+    resume_names = ["Pranav Bisht", "Alex Morgan", "Elena Rostova", "Marcus Chen", "Pooja Hegde", "Jordan Lee", "Riya Sharma"]
+    resume_roles = [
+        "Senior Full Stack Software Engineer",
+        "Machine Learning Engineer & Data Scientist",
+        "DevOps & Cloud Infrastructure Architect",
+        "Product Designer & UI/UX Specialist",
+        "Backend Developer & Systems Architect",
+    ]
     for i in range(samples_per_class):
-        candidate = rng.choice(["Pranav Bisht", "Alex Morgan", "Elena Rostova", "Marcus Chen", "Pooja Hegde"])
-        role = rng.choice([
-            "Senior Full Stack Software Engineer",
-            "Machine Learning Engineer & Data Scientist",
-            "DevOps & Cloud Infrastructure Architect",
-            "Product Designer & UI/UX Specialist",
-        ])
-        sub_type = rng.choice(["resume", "cover_letter", "memo"])
-        if sub_type == "resume":
-            text = (
-                f"{candidate}\n"
-                f"Email: {candidate.lower().replace(' ', '.')}@example.com | Phone: +1-555-0192 | GitHub: github.com/candidate\n"
-                f"LinkedIn: linkedin.com/in/{candidate.lower().replace(' ', '')}\n\n"
-                f"PROFESSIONAL SUMMARY\n"
-                f"Dynamic {role} with experience designing scalable microservices, "
-                f"modern web applications with React and FastAPI, and optimizing database pipelines.\n\n"
-                f"TECHNICAL SKILLS\n"
-                f"Languages: Python, JavaScript, TypeScript, Go, SQL\n"
-                f"Frameworks: FastAPI, React, Node.js, TailwindCSS, PyTorch\n"
-                f"Databases & Tools: PostgreSQL, SQLite, Docker, Kubernetes, Git, CI/CD\n\n"
-                f"WORK EXPERIENCE\n"
-                f"{role} — Tech Innovations Corp (2023 - Present)\n"
-                f"• Architected automated document ingestion system serving 100k daily requests.\n"
-                f"• Spearheaded migration from legacy monolith to cloud-native microservices.\n\n"
-                f"EDUCATION\n"
-                f"Bachelor of Technology in Computer Science, GPA: 3.9/4.0 (2019 - 2023)\n"
-                f"PROJECTS & CERTIFICATIONS\n"
-                f"DocuBrix: Intelligent document processing with multi-domain OCR and workflow rules."
-            )
-        elif sub_type == "cover_letter":
-            text = (
-                f"{candidate}\n"
-                f"Date: November 15, 2026\n"
-                f"Hiring Manager\n"
-                f"Innovative Tech Solutions\n\n"
-                f"Dear Hiring Team,\n\n"
-                f"I am writing to express my strong enthusiasm for the {role} position at your organization. "
-                f"With a strong background in software engineering, distributed systems, and modern AI development, "
-                f"I am eager to contribute to your team's mission.\n\n"
-                f"Throughout my professional journey, I have built reliable web applications, improved API response times "
-                f"by 40%, and collaborated closely with cross-functional product teams. I look forward to the opportunity "
-                f"to discuss how my qualifications align with your engineering goals.\n\n"
-                f"Thank you for your time and consideration.\n\n"
-                f"Sincerely,\n"
-                f"{candidate}"
-            )
-        else:
-            text = (
-                f"INTERNAL DISCUSSION MEMO\n"
-                f"Date: 2026-10-22\n"
-                f"Author: {candidate}\n"
-                f"Topic: Engineering sprint retrospective and team knowledge sharing.\n\n"
-                f"Hi team, below is a quick summary of our recent sprint discussion:\n"
-                f"- Completed refactoring of frontend card layouts and responsive components.\n"
-                f"- Improved unit test reliability and continuous integration execution times.\n"
-                f"- Scheduled upcoming architecture workshop for end-to-end integration.\n"
-                f"Please add your feedback to the team wiki by Friday."
-            )
+        candidate = rng.choice(resume_names)
+        role = rng.choice(resume_roles)
+        email = candidate.lower().replace(" ", ".") + "@example.com"
+        gpa = rng.uniform(3.4, 4.0)
+        text = (
+            f"{candidate}\n"
+            f"Email: {email} | Phone: +1-555-{rng.randint(1000,9999)} | GitHub: github.com/{candidate.lower().replace(' ', '')}\n"
+            f"LinkedIn: linkedin.com/in/{candidate.lower().replace(' ', '')}\n\n"
+            f"PROFESSIONAL SUMMARY\n"
+            f"Dynamic {role} with {rng.randint(2, 8)} years of experience designing scalable microservices, "
+            f"modern web applications, and optimizing database pipelines.\n\n"
+            f"TECHNICAL SKILLS\n"
+            f"Languages: Python, JavaScript, TypeScript, Go, SQL\n"
+            f"Frameworks: FastAPI, React, Node.js, TailwindCSS, PyTorch\n"
+            f"Databases & Tools: PostgreSQL, SQLite, Docker, Kubernetes, Git, CI/CD\n\n"
+            f"WORK EXPERIENCE\n"
+            f"{role} — Tech Innovations Corp (2023 - Present)\n"
+            f"• Architected automated document ingestion system serving 100k daily requests.\n"
+            f"• Spearheaded migration from legacy monolith to cloud-native microservices.\n\n"
+            f"EDUCATION\n"
+            f"Bachelor of Technology in Computer Science, GPA: {gpa:.1f}/4.0 (2019 - 2023)\n"
+            f"PROJECTS & CERTIFICATIONS\n"
+            f"DocuBrix: Intelligent document processing with multi-domain OCR and workflow rules.\n"
+            f"Volunteer Experience: Mentored 20+ junior developers at local coding bootcamp."
+        )
+        data.append({"text": text, "label": "resume_cv"})
+
+    # 13b. COVER LETTER
+    for i in range(samples_per_class):
+        candidate = rng.choice(resume_names)
+        role = rng.choice(resume_roles)
+        company = rng.choice(["Innovative Tech Solutions", "Apex Systems", "Quantum Labs", "Nexus Corp", "Stellar AI"])
+        salutation = rng.choice(["Dear Hiring Manager,", "Dear Hiring Team,", "Dear Recruiter,", "To Whom It May Concern,"])
+        text = (
+            f"{candidate}\n"
+            f"Date: November {rng.randint(1, 28)}, 2026\n"
+            f"Hiring Manager\n"
+            f"{company}\n\n"
+            f"{salutation}\n\n"
+            f"I am writing to express my strong enthusiasm for the {role} position at your organization. "
+            f"With a strong background in software engineering, distributed systems, and modern AI development, "
+            f"I am eager to contribute to your team's mission.\n\n"
+            f"Throughout my professional journey, I have built reliable web applications, improved API response times "
+            f"by 40%, and collaborated closely with cross-functional product teams. I look forward to the opportunity "
+            f"to discuss how my qualifications align with your engineering goals.\n\n"
+            f"Thank you for your time and consideration.\n\n"
+            f"Sincerely,\n"
+            f"{candidate}"
+        )
+        data.append({"text": text, "label": "cover_letter"})
+
+    # 13c. JOB DESCRIPTION
+    jd_companies = ["Nexus Technologies", "Stellar AI Inc.", "Apex Software", "Quantum Systems", "FutureTech Corp"]
+    for i in range(samples_per_class):
+        company = rng.choice(jd_companies)
+        role = rng.choice(resume_roles)
+        salary_min = rng.randint(80, 130) * 1000
+        salary_max = salary_min + rng.randint(20, 50) * 1000
+        text = (
+            f"JOB DESCRIPTION — {company}\n"
+            f"Job Title: {role}\n"
+            f"Location: Remote / Hybrid\n"
+            f"Salary Range: ${salary_min:,} – ${salary_max:,} per year\n\n"
+            f"About the Role:\n"
+            f"We are hiring a {role} to join our growing engineering team. "
+            f"You will be responsible for designing scalable services, mentoring junior engineers, "
+            f"and collaborating with product teams.\n\n"
+            f"Responsibilities:\n"
+            f"• Design, build, and maintain high-quality software systems.\n"
+            f"• Conduct code reviews and ensure engineering best practices.\n"
+            f"• Collaborate with product and design teams on new features.\n\n"
+            f"Qualifications Required:\n"
+            f"• {rng.randint(3, 7)}+ years of experience in software engineering.\n"
+            f"• Proficiency in Python, JavaScript, or Go.\n"
+            f"• Experience with cloud platforms (AWS, GCP, or Azure).\n\n"
+            f"Benefits: Health insurance, 401(k), flexible PTO, remote work.\n"
+            f"Equal Opportunity Employer. Apply Now at careers.{company.lower().replace(' ', '')}.com"
+        )
+        data.append({"text": text, "label": "job_description"})
+
+    # 13d. OTHER DOCUMENT (General memos, notes, general correspondence)
+    for i in range(samples_per_class):
+        candidate = rng.choice(resume_names)
+        text = (
+            f"INTERNAL DISCUSSION MEMO\n"
+            f"Date: 2026-10-{rng.randint(10, 28)}\n"
+            f"Author: {candidate}\n"
+            f"Topic: Engineering sprint retrospective and team knowledge sharing.\n\n"
+            f"Hi team, below is a quick summary of our recent sprint discussion:\n"
+            f"- Completed refactoring of frontend card layouts and responsive components.\n"
+            f"- Improved unit test reliability and continuous integration execution times.\n"
+            f"- Scheduled upcoming architecture workshop for end-to-end integration.\n"
+            f"Please add your feedback to the team wiki by Friday."
+        )
         data.append({"text": text, "label": "other_document"})
+
+    # 13e. PURCHASE ORDER (Business & Commercial)
+    po_suppliers = ["Global Office Supplies", "Tech Hardware Hub", "Apex Procurement Services", "Metro Industrial Co.", "Nexus Distribution"]
+    po_buyers = ["Wayne Enterprises", "Stark Industries", "Cyberdyne Corp", "Initech Software", "Massive Dynamic"]
+    for i in range(samples_per_class):
+        supplier = rng.choice(po_suppliers)
+        buyer = rng.choice(po_buyers)
+        po_num = f"PO-{rng.randint(2024, 2026)}-{rng.randint(10000, 99999)}"
+        qty = rng.randint(10, 500)
+        unit_cost = rng.uniform(5.0, 250.0)
+        total = qty * unit_cost
+        text = (
+            f"PURCHASE ORDER\n"
+            f"PO Number: {po_num}\n"
+            f"Date: 2026-0{rng.randint(1, 9)}-{rng.randint(10, 28)}\n"
+            f"Buyer: {buyer}\n"
+            f"Ship To: {buyer} Warehouse, 456 Industrial Blvd\n"
+            f"Supplier: {supplier}\n\n"
+            f"Item Description | Quantity Ordered | Unit Cost | Total\n"
+            f"Office Supplies Bundle | {qty} units | ${unit_cost:.2f} | ${total:.2f}\n\n"
+            f"Deliver To: Receiving Dock A by 2026-10-{rng.randint(10, 28)}\n"
+            f"Requisition No: REQ-{rng.randint(100, 999)}\n"
+            f"Approved By: Procurement Manager\n"
+            f"Special Instructions: Handle with care. No substitutions."
+        )
+        data.append({"text": text, "label": "purchase_order"})
 
     # 14. OTHER FINANCIAL DOCUMENT (Earnings reports, board budget summaries)
     for i in range(samples_per_class):

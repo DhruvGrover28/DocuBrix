@@ -40,7 +40,7 @@ def test_multidomain_classification() -> None:
     )
     res_acad = classify_document_result(academic_text)
     assert res_acad.document_type == "academic_transcript"
-    assert res_acad.category == "Academic"
+    assert res_acad.category == "Academic & Research"
 
     legal_text = (
         "MUTUAL NON-DISCLOSURE AGREEMENT\n"
@@ -64,7 +64,7 @@ def test_multidomain_classification() -> None:
     )
     res_med = classify_document_result(medical_text)
     assert res_med.document_type == "medical_prescription"
-    assert res_med.category == "Medical"
+    assert res_med.category == "Medical & Healthcare"
 
     salary_text = (
         "GLOBAL TECH SOLUTIONS LTD.\n"
@@ -91,7 +91,7 @@ def test_multidomain_extraction() -> None:
         "Semester: VII"
     )
     fields = extract_domain_fields(academic_text, "academic_transcript")
-    assert fields["category"] == "Academic"
+    assert fields["category"] == "Academic & Research"
     assert "Pranav Bisht" in fields["student_name"]
     assert "8.84" in fields["cgpa_percentage"]
 

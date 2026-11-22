@@ -295,7 +295,7 @@ def _extract_total_amount(text: str, amounts: list[str]) -> str:
 def extract_domain_fields(raw_text: str, document_type: str | None = None) -> dict[str, Any]:
     norm_type = document_type or classify_document(raw_text)
     text = raw_text.replace("\r\n", "\n").replace("\r", "\n")
-    category = DOCUMENT_CATEGORY_MAP.get(norm_type, "General")
+    category = DOCUMENT_CATEGORY_MAP.get(norm_type, "General & Miscellaneous")
     field_map: dict[str, Any] = {
         "document_type": norm_type,
         "category": category,
@@ -534,11 +534,145 @@ def extract_domain_fields(raw_text: str, document_type: str | None = None) -> di
             "document_date": primary_date or "",
         })
 
-    else:
+    elif norm_type == "resume_cv":
+        # --- Layer A: Universal metadata ---
+        candidate_name = _clean_person_name(
+            _match_first(r"(?:name\s*[:\-]\s*)([A-Za-z\s.']+?)(?:\n|$)", text)
+        )
+        if not candidate_name:
+            # Heuristic: first non-blank line that looks like a name (all words, length 4-50)
+            for line in text.splitlines()[:5]:
+                line = line.strip()
+                if 4 <= len(line) <= 50 and re.match(r"^[A-Za-z\s.']+$", line) and " " in line:
+                    candidate_name = line
+                    break
+
+        contact_email = _match_first(r"([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})", text)
+        contact_phone = _match_first(r"(?:phone|ph|mobile|tel|contact)\s*[:\-]?\s*([\+\d\s\(\)\-]{7,20})", text)
+        if not contact_phone:
+            contact_phone = _match_first(r"(\+?\d[\d\s\-\(\)]{7,19}\d)", text)
+
+        location = _match_first(r"(?:location|address|city|based\s*in)\s*[:\-]?\s*([^\n\r|,]+)", text)
+
+        professional_summary = _match_first(
+            r"(?:professional\s*summary|career\s*summary|summary|objective|career\s*objective|profile)\s*[\:\-]?\s*\n+([^\n].+?)(?=\n\n|\n[A-Z]{3,})",
+            text, dotall=True
+        )
+        if professional_summary:
+            professional_summary = " ".join(professional_summary.split())[:400]
+
+        # --- Layer B: Resume-specific fields ---
+        # Technical skills: grab the section content
+        skills_raw = _match_first(
+            r"(?:technical\s*skills|skills\s*summary|skills|competencies|core\s*skills)\s*[\:\-]?\s*\n+(.+?)(?=\n\n|\n[A-Z]{3,}|\Z)",
+            text, dotall=True
+        )
+        # Parse skills into list if possible
+        technical_skills: list[str] = []
+        if skills_raw:
+            for line in skills_raw.splitlines():
+                line = line.strip().strip("•-*").strip()
+                if line and 2 < len(line) < 120:
+                    technical_skills.append(line)
+        if not technical_skills and skills_raw:
+            technical_skills = [s.strip() for s in re.split(r"[,|•·]", skills_raw) if s.strip() and len(s.strip()) > 2][:8]
+
+        # Work experience: grab section heading onwards
+        work_exp_raw = _match_first(
+            r"(?:work\s*experience|professional\s*experience|experience|employment)\s*[\:\-]?\s*\n+(.+?)(?=\n\n(?:[A-Z]{2,}|\Z)|\Z)",
+            text, dotall=True
+        )
+        work_experience = " ".join(work_exp_raw.split())[:500] if work_exp_raw else ""
+
+        # Education
+        education_raw = _match_first(
+            r"(?:education|academic\s*background|qualifications)\s*[\:\-]?\s*\n+(.+?)(?=\n\n(?:[A-Z]{2,}|\Z)|\Z)",
+            text, dotall=True
+        )
+        education = " ".join(education_raw.split())[:300] if education_raw else ""
+
+        # Links: GitHub, LinkedIn
+        links: list[str] = re.findall(r"(?:https?://[^\s]+|(?:github|linkedin)\.com/[^\s|,]+)", text)
+        links = links[:5]
+
         field_map.update({
-            "vendor": _match_first(r"(?:vendor|merchant|payee|from)\s*[:\-]?\s*([^\n\r]+)", text) or "",
+            "candidate_name": candidate_name or "",
+            "contact_email": contact_email or "",
+            "contact_phone": contact_phone or "",
+            "location": location or "",
+            "professional_summary": professional_summary or "",
+            "technical_skills": technical_skills if technical_skills else "",
+            "work_experience": work_experience or "",
+            "education": education or "",
+            "links": links if links else "",
             "document_date": primary_date or "",
-            "total_amount": _extract_total_amount(text, amounts),
+        })
+
+    elif norm_type == "cover_letter":
+        candidate_name = _clean_person_name(
+            _match_first(r"^([A-Za-z\s.']+?)(?:\n)", text)
+        )
+        recipient_org = _match_first(r"(?:hiring\s*manager|dear\s+(?:hiring|recruiter)|to\s*whom)[^\n]*\n+([^\n]+)", text)
+        position = _match_first(r"(?:position\s*of|applying\s*for\s*the)\s+(?:role\s+of\s+)?(.+?)(?:\s+at\s+|\n|$)", text)
+        body_lines = [l.strip() for l in text.splitlines() if len(l.strip()) > 40 and not l.strip().isupper()]
+        body_excerpt = " ".join(body_lines[:3])[:400] if body_lines else ""
+
+        field_map.update({
+            "candidate_name": candidate_name or "",
+            "recipient_organization": recipient_org or "",
+            "applied_position": position or "",
+            "letter_excerpt": body_excerpt,
+            "document_date": primary_date or "",
+        })
+
+    elif norm_type == "job_description":
+        job_title = _match_first(r"(?:job\s*title|position|role)\s*[:\-]?\s*([^\n\r]+)", text)
+        company = _match_first(r"(?:company|employer|organization|firm)\s*[:\-]?\s*([^\n\r]+)", text)
+        if not company:
+            for line in text.splitlines()[:3]:
+                line = line.strip()
+                if re.search(r"\b(inc|ltd|corp|co\.|technologies|solutions|systems)\b", line, re.I):
+                    company = line
+                    break
+        location = _match_first(r"(?:location|work\s*location|city|remote|hybrid)\s*[:\-]?\s*([^\n\r]+)", text)
+        salary = _match_first(r"(?:salary|compensation|pay)\s*(?:range)?\s*[:\-]?\s*([^\n\r]+)", text)
+        experience_req = _match_first(r"(\d+\+?\s*years?\s*(?:of\s*)?(?:experience|exp))", text)
+
+        field_map.update({
+            "job_title": job_title or "",
+            "company": company or "",
+            "location": location or "",
+            "salary_range": salary or "",
+            "experience_required": experience_req or "",
+            "document_date": primary_date or "",
+        })
+
+    elif norm_type == "purchase_order":
+        po_number = _match_first(r"(?:purchase\s*order|po\s*(?:number|no\.?|#))\s*[:\-]?\s*([A-Za-z0-9\-/]+)", text)
+        buyer = _match_first(r"(?:buyer|bill\s*to|ordered\s*by|company)\s*[:\-]?\s*([^\n\r]+)", text)
+        supplier = _match_first(r"(?:supplier|vendor|from|sell\s*to)\s*[:\-]?\s*([^\n\r]+)", text)
+        total_amount = _extract_total_amount(text, amounts)
+        delivery_date = _match_first(r"(?:deliver(?:y)?\s*(?:by|date)|required\s*by)\s*[:\-]?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})", text)
+
+        field_map.update({
+            "po_number": po_number or "",
+            "buyer": buyer or "",
+            "supplier": supplier or "",
+            "total_amount": total_amount or "",
+            "delivery_date": delivery_date or "",
+            "document_date": primary_date or "",
+        })
+
+    else:
+        # Universal safe fallback — NEVER inject vendor/total_amount for unknown document types
+        # Layer A: Extract only unambiguous generic metadata
+        summary_lines = [l.strip() for l in text.splitlines() if len(l.strip()) > 30 and not l.strip().isupper()]
+        summary_excerpt = " ".join(summary_lines[:2])[:300] if summary_lines else ""
+
+        field_map.update({
+            "document_date": primary_date or "",
+            "summary": summary_excerpt,
+            "detected_amounts": amounts[:5] if amounts else [],
         })
 
     return field_map
@@ -619,8 +753,35 @@ def validate_extracted_fields(document_type: str, extracted: dict[str, Any]) -> 
             if not present:
                 warnings.append(f"Incomplete medical record: missing {field}")
 
+    elif document_type == "resume_cv":
+        for field in ["candidate_name", "contact_email", "work_experience", "education"]:
+            val = extracted.get(field, "")
+            # val may be a list (technical_skills) or a string
+            present = bool(val and str(val).strip() not in ("", "Unknown"))
+            checks[field] = present
+            if not present:
+                warnings.append(f"Resume missing expected field: {field}")
+
+    elif document_type == "cover_letter":
+        checks["candidate_name"] = bool(extracted.get("candidate_name", "").strip())
+        checks["letter_excerpt"] = bool(extracted.get("letter_excerpt", "").strip())
+        if not checks["candidate_name"]:
+            warnings.append("Cover letter: candidate name not found.")
+
+    elif document_type in ("job_description", "purchase_order"):
+        checks["document_date"] = bool(extracted.get("document_date", "").strip())
+        # Accept if any primary field is populated
+        checks["has_content"] = any(
+            bool(str(v).strip()) for k, v in extracted.items()
+            if k not in ("document_type", "category", "document_date")
+        )
+        if not checks["has_content"]:
+            warnings.append(f"{document_type}: minimal content extracted.")
+
     else:
-        checks["generic_presence"] = bool(extracted.get("document_date") or extracted.get("total_amount") or extracted.get("vendor"))
+        checks["generic_presence"] = bool(
+            extracted.get("document_date") or extracted.get("summary") or extracted.get("detected_amounts")
+        )
         if not checks["generic_presence"]:
             warnings.append("Document lacks key entity and date markers.")
 
@@ -645,7 +806,9 @@ def build_confidence_report(document_type: str, extracted: dict[str, Any], valid
         1 for k, v in extracted.items()
         if k not in ("document_type", "category") and v not in (None, "", "Unknown", "Entity")
     )
-    expected_fields = 4 if document_type in ("invoice", "receipt", "bank_statement", "salary_slip", "academic_transcript") else 3
+    expected_fields = 4 if document_type in ("invoice", "receipt", "bank_statement", "salary_slip", "academic_transcript") else (
+        5 if document_type == "resume_cv" else 3
+    )
 
     field_ratio = min(1.0, non_empty / max(expected_fields, 1))
     valid_checks = sum(1 for v in checks.values() if v is True)

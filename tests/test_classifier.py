@@ -215,8 +215,8 @@ def test_train_and_evaluate_pipeline(tmp_path: Path) -> None:
     assert "classifier" in loaded
 
 
-def test_production_bundled_model_loads_and_classifies_all_12_classes() -> None:
-    """Validate that the production model artifact loads and classifies all domain types with ML probabilities."""
+def test_production_bundled_model_loads_and_classifies_all_18_classes() -> None:
+    """Validate that the production model artifact loads and classifies all 18 domain types with ML probabilities."""
     samples = {
         "invoice": (
             "TAX INVOICE\nVendor: Apex Cloud Technologies LLC\nBill To: Wayne Enterprises\n"
@@ -240,17 +240,41 @@ def test_production_bundled_model_loads_and_classifies_all_12_classes() -> None:
             "Employee ID: EMP-4921\nGross Pay: $6,500.00\nProvident Fund: $450.00\nNet Salary: $5,250.00",
             "Financial",
         ),
+        "resume_cv": (
+            "Pranav Bisht\nEmail: pranav@example.com | Phone: +91-9876543210 | GitHub: github.com/pranavbisht\n"
+            "PROFESSIONAL SUMMARY\nFull Stack & ML Engineer with 4 years of experience.\n\n"
+            "TECHNICAL SKILLS\nPython, JavaScript, React, FastAPI, PostgreSQL, Docker\n\n"
+            "WORK EXPERIENCE\nSoftware Engineer — Tech Corp (2023 - Present)\n"
+            "• Built automated microservices for document parsing.\n\n"
+            "EDUCATION\nBachelor of Technology in Computer Science, GPA: 8.9/10.0\n"
+            "PROJECTS & CERTIFICATIONS\nDocuBrix: Intelligent document platform. Volunteer Experience: Mentored 10 developers.",
+            "Professional & Career",
+        ),
+        "cover_letter": (
+            "Alex Morgan\nDate: November 15, 2026\nHiring Manager\nInnovative Tech Solutions\n\n"
+            "Dear Hiring Team,\n\nI am writing to express my strong enthusiasm for the Software Engineer position. "
+            "With expertise in distributed systems, I am eager to contribute to your mission.\n\nSincerely,\nAlex Morgan",
+            "Professional & Career",
+        ),
+        "job_description": (
+            "JOB DESCRIPTION — Nexus Technologies\nJob Title: Senior Full Stack Software Engineer\n"
+            "Location: Remote / Hybrid\nSalary Range: $110,000 – $150,000 per year\n\n"
+            "We are hiring a Senior Engineer to join our team.\nResponsibilities: Design and build scalable systems.\n"
+            "Qualifications Required: 4+ years of software engineering experience.\n"
+            "Equal Opportunity Employer. Apply Now at careers.nexustechnologies.com",
+            "Professional & Career",
+        ),
         "academic_transcript": (
             "DELHI TECHNOLOGICAL UNIVERSITY\nOFFICIAL TRANSCRIPT OF ACADEMIC RECORD\n"
             "Student Name: Pranav Bisht\nRoll Number: 2K20/CO/315\nDegree: Bachelor of Technology\n"
             "Credits Registered: 24 | Cumulative GPA (CGPA): 8.92 / 10.0\nSemester: VII Semester",
-            "Academic",
+            "Academic & Research",
         ),
         "academic_certificate": (
             "STANFORD UNIVERSITY\nDEGREE CERTIFICATE\nThe Chancellor and Academic Council hereby certify "
             "that the degree of Master of Science in Artificial Intelligence has been conferred upon "
             "Diana Prince having fulfilled all requirements.",
-            "Academic",
+            "Academic & Research",
         ),
         "legal_contract": (
             "MASTER SERVICES AGREEMENT\nThis Agreement is entered into by and between Acme Global Holdings "
@@ -268,25 +292,33 @@ def test_production_bundled_model_loads_and_classifies_all_12_classes() -> None:
             "APOLLO CLINICAL HEALTHCARE\nOUTPATIENT CLINICAL PRESCRIPTION\nConsultant: Dr. Arvind Sharma, MD\n"
             "Patient Name: John Doe | Age/Sex: 34 Yrs / Male\nRx:\n1. Tab. Paracetamol 650mg - 1 tab three times daily\n"
             "2. Syrup CoughRelief 10ml at bedtime\nDoctor Signature",
-            "Medical",
+            "Medical & Healthcare",
         ),
         "medical_lab_report": (
             "QUEST DIAGNOSTICS PATHOLOGY\nLABORATORY INVESTIGATION REPORT\nPatient Name: Jane Doe\n"
             "Department: Clinical Biochemistry\nTest Name: Complete Blood Count\n"
             "Haemoglobin | Observed Value: 14.2 g/dL | Biological Reference Interval: 13.0 - 17.0\nPathologist: Dr. N. Sengupta",
-            "Medical",
+            "Medical & Healthcare",
         ),
         "identity_document": (
             "GOVERNMENT ISSUED OFFICIAL PASSPORT\nDocument Number: P9482014\nCardholder Full Name: PRANAV BISHT\n"
             "Date of Birth (DOB): 2002-05-14\nGender: MALE\nNationality: INDIAN\n"
             "Issuing Authority: Government Ministry of External Affairs\nExpiry Date: 2032-05-13",
-            "Administrative",
+            "Administrative & Identity",
         ),
         "official_notice": (
             "OFFICE OF THE REGISTRAR, CENTRAL UNIVERSITY\nOFFICE MEMORANDUM / OFFICIAL NOTICE\n"
             "Reference No: ADM/NOT/2026/412\nSubject: Administrative Circular regarding revised office hours.\n"
             "By Order of the Competent Authority\nJoint Secretary",
-            "Administrative",
+            "Administrative & Identity",
+        ),
+        "purchase_order": (
+            "PURCHASE ORDER\nPO Number: PO-2026-54321\nDate: 2026-05-15\nBuyer: Wayne Enterprises\n"
+            "Ship To: Wayne Enterprises Warehouse, 456 Industrial Blvd\nSupplier: Global Office Supplies\n"
+            "Item Description | Quantity Ordered | Unit Cost | Total\n"
+            "Office Supplies Bundle | 100 units | $25.00 | $2500.00\n"
+            "Deliver To: Receiving Dock A by 2026-06-01\nRequisition No: REQ-421\nApproved By: Procurement Manager",
+            "Business & Commercial",
         ),
     }
 
@@ -295,13 +327,13 @@ def test_production_bundled_model_loads_and_classifies_all_12_classes() -> None:
         assert res.method == "ml", f"Expected ML classification for {expected_type}, got {res.method}"
         assert res.status == "classified"
         assert res.document_type == expected_type, f"Expected {expected_type}, got {res.document_type}"
-        assert res.category == expected_category, f"Expected category {expected_category}, got {res.category}"
+        assert res.category == expected_category, f"Expected category {expected_category} for {expected_type}, got {res.category}"
         assert res.confidence is not None and res.confidence >= 0.30, f"Low confidence {res.confidence} for {expected_type}"
         assert res.model_name == "tfidf-logistic-regression"
 
 
-def test_resume_and_general_documents_not_misclassified_as_financial() -> None:
-    """Ensure generic non-financial documents (Resumes, cover letters) are classified as General / other_document."""
+def test_resume_and_cover_letter_classified_as_professional_career() -> None:
+    """Ensure resumes and cover letters are classified as Professional & Career, NOT Financial."""
     resume_text = (
         "Pranav Bisht\n"
         "Email: pranav@example.com | Phone: +91-9876543210 | GitHub: github.com/Tester-acc-007\n"
@@ -318,11 +350,11 @@ def test_resume_and_general_documents_not_misclassified_as_financial() -> None:
         "EDUCATION\n"
         "Bachelor of Technology in Computer Science, GPA: 8.9/10.0\n"
         "PROJECTS & CERTIFICATIONS\n"
-        "DocuBrix: End-to-end intelligent document platform."
+        "DocuBrix: End-to-end intelligent document platform. Volunteer Experience: Mentored junior developers."
     )
     res_resume = classify_document_result(resume_text)
-    assert res_resume.document_type == "other_document"
-    assert res_resume.category == "General"
+    assert res_resume.document_type == "resume_cv", f"Expected resume_cv, got {res_resume.document_type}"
+    assert res_resume.category == "Professional & Career", f"Expected Professional & Career, got {res_resume.category}"
     assert res_resume.category != "Financial"
 
     cover_letter = (
@@ -336,13 +368,13 @@ def test_resume_and_general_documents_not_misclassified_as_financial() -> None:
         "Pranav Bisht"
     )
     res_letter = classify_document_result(cover_letter)
-    assert res_letter.document_type == "other_document"
-    assert res_letter.category == "General"
+    assert res_letter.document_type == "cover_letter", f"Expected cover_letter, got {res_letter.document_type}"
+    assert res_letter.category == "Professional & Career", f"Expected Professional & Career, got {res_letter.category}"
     assert res_letter.category != "Financial"
 
 
 def test_heuristic_fallback_prevents_resume_from_misclassification(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Ensure that even in fallback mode, resumes and general text are General/other_document and not Financial."""
+    """Ensure that even in fallback mode, resumes are Professional & Career and cover letters aren't Financial."""
     monkeypatch.setenv("DOCUBRIX_CLASSIFIER_PATH", str(tmp_path / "absent_model.pkl"))
 
     resume_text = (
@@ -355,14 +387,13 @@ def test_heuristic_fallback_prevents_resume_from_misclassification(monkeypatch: 
     )
     res = classify_document_result(resume_text)
     assert res.method == "heuristic_fallback"
-    assert res.document_type == "other_document"
-    assert res.category == "General"
+    assert res.document_type == "resume_cv", f"Expected resume_cv in heuristic fallback, got {res.document_type}"
+    assert res.category == "Professional & Career", f"Expected Professional & Career, got {res.category}"
     assert res.category != "Financial"
 
     generic_note = "Meeting Notes\nDiscussed sprint milestones and team alignment for Q4."
     res_note = classify_document_result(generic_note)
     assert res_note.method == "heuristic_fallback"
-    assert res_note.category == "General"
     assert res_note.category != "Financial"
 
 

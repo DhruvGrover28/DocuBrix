@@ -197,9 +197,22 @@ def evaluate_document_workflows(document: dict[str, Any]) -> dict[str, Any]:
                 else:
                     matched = True
 
-        # Condition: categories
+        # Condition: categories — supports full names and legacy aliases
         if "categories" in conds:
-            if category in conds["categories"]:
+            # Build a set of aliases for the document's category to support both old and new names
+            _alias_map = {
+                "Academic & Research": {"Academic", "Academic & Research"},
+                "Medical & Healthcare": {"Medical", "Medical & Healthcare"},
+                "Administrative & Identity": {"Administrative", "Administrative & Identity"},
+                "General & Miscellaneous": {"General", "General & Miscellaneous"},
+                "Professional & Career": {"Professional & Career", "Professional", "Career"},
+                "Business & Commercial": {"Business & Commercial", "Business", "Commercial"},
+                "Financial": {"Financial"},
+                "Legal": {"Legal"},
+            }
+            doc_cat_aliases = _alias_map.get(category, {category})
+            rule_cats = set(conds["categories"])
+            if doc_cat_aliases & rule_cats:
                 matched = True
 
         if matched:

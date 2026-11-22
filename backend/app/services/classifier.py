@@ -15,21 +15,40 @@ DOCUMENT_CATEGORY_MAP: dict[str, str] = {
     "bank_statement": "Financial",
     "salary_slip": "Financial",
     "other_financial_document": "Financial",
-    # Academic
-    "academic_transcript": "Academic",
-    "academic_certificate": "Academic",
+    # Professional & Career (new)
+    "resume_cv": "Professional & Career",
+    "cover_letter": "Professional & Career",
+    "job_description": "Professional & Career",
+    # Academic & Research
+    "academic_transcript": "Academic & Research",
+    "academic_certificate": "Academic & Research",
     # Legal
     "legal_contract": "Legal",
     "non_disclosure_agreement": "Legal",
-    # Medical
-    "medical_prescription": "Medical",
-    "medical_lab_report": "Medical",
-    # Administrative
-    "identity_document": "Administrative",
-    "official_notice": "Administrative",
-    # General
-    "other_document": "General",
-    "unknown": "General",
+    # Medical & Healthcare
+    "medical_prescription": "Medical & Healthcare",
+    "medical_lab_report": "Medical & Healthcare",
+    # Business & Commercial (new)
+    "purchase_order": "Business & Commercial",
+    # Administrative & Identity
+    "identity_document": "Administrative & Identity",
+    "official_notice": "Administrative & Identity",
+    # General & Miscellaneous
+    "other_document": "General & Miscellaneous",
+    "unknown": "General & Miscellaneous",
+}
+
+# Legacy alias map — allows existing workflow rules / tests that check "Academic",
+# "Medical", "Administrative", "General" to still match the new full category strings.
+CATEGORY_ALIASES: dict[str, str] = {
+    "Academic": "Academic & Research",
+    "Medical": "Medical & Healthcare",
+    "Administrative": "Administrative & Identity",
+    "General": "General & Miscellaneous",
+    "Professional": "Professional & Career",
+    "Career": "Professional & Career",
+    "Business": "Business & Commercial",
+    "Commercial": "Business & Commercial",
 }
 
 
@@ -118,10 +137,29 @@ MARKERS: dict[str, tuple[str, ...]] = {
         "reference no", "to all staff", "order no", "competent authority", "issued by",
         "gazette notification", "administrative order",
     ),
-    "other_document": (
+    "resume_cv": (
         "curriculum vitae", "resume", "work experience", "professional summary",
-        "technical skills", "projects & certifications", "hiring manager", "dear hiring",
-        "sincerely", "cover letter", "to whom it may concern", "job application",
+        "technical skills", "projects & certifications", "references available",
+        "objective", "career objective", "skills summary", "volunteer experience",
+        "languages known",
+    ),
+    "cover_letter": (
+        "dear hiring manager", "dear hiring team", "dear recruiter", "to whom it may concern",
+        "i am writing to express", "i am applying for", "job application", "enclosed is my resume",
+        "sincerely yours", "yours faithfully",
+    ),
+    "job_description": (
+        "job description", "job title", "responsibilities", "qualifications required",
+        "skills required", "we are hiring", "we are looking for", "apply now",
+        "salary range", "benefits", "equal opportunity employer",
+    ),
+    "purchase_order": (
+        "purchase order", "po number", "po #", "order number", "ship to",
+        "deliver to", "quantity ordered", "unit cost", "requisition",
+    ),
+    "other_document": (
+        "memo", "memorandum", "minutes of meeting", "meeting notes",
+        "action items", "discussion points",
     ),
 }
 
@@ -138,10 +176,24 @@ ANCHORS: dict[str, list[str]] = {
     "medical_lab_report": [r"\b(?:lab(?:oratory)?\s*report|pathology|reference\s*(?:range|interval))\b"],
     "identity_document": [r"\b(?:identity\s*card|passport|driving\s*licen[sc]e|voter\s*id)\b", r"\bdate\s*of\s*birth\b"],
     "official_notice": [r"\b(?:office\s*memorandum|circular|official\s*notice)\b"],
-    "other_document": [
+    "resume_cv": [
         r"\b(?:curriculum\s*vitae|resume|c\.?v\.?)\b",
         r"\b(?:professional\s*summary|work\s*experience|technical\s*skills)\b",
-        r"\b(?:dear\s*(?:hiring|team|mr\.|ms\.)|to\s*whom\s*it\s*may\s*concern)\b",
+        r"\b(?:career\s*objective|skills\s*summary|volunteer\s*experience)\b",
+    ],
+    "cover_letter": [
+        r"\b(?:dear\s*(?:hiring\s*(?:manager|team)|recruiter)|to\s*whom\s*it\s*may\s*concern)\b",
+        r"\bi\s*am\s*(?:writing\s*to|applying\s*for)\b",
+    ],
+    "job_description": [
+        r"\b(?:job\s*description|job\s*title|we\s*are\s*(?:hiring|looking\s*for))\b",
+    ],
+    "purchase_order": [
+        r"\b(?:purchase\s*order|po\s*(?:number|#))\b",
+        r"\b(?:ship\s*to|deliver\s*to|quantity\s*ordered)\b",
+    ],
+    "other_document": [
+        r"\b(?:memorandum|minutes\s*of\s*meeting|action\s*items)\b",
     ],
 }
 
@@ -183,13 +235,20 @@ def _heuristic_label_and_confidence(raw_text: str) -> tuple[str, str, float, dic
             raw_scores["official_notice"] += 2.0
 
     # Disambiguate resumes, CVs, and cover letters to prevent misclassification as salary slip / financial
-    resume_indicators = ("curriculum vitae", "resume", "work experience", "technical skills", "professional summary", "projects & certifications")
+    resume_indicators = ("curriculum vitae", "resume", "work experience", "technical skills", "professional summary", "projects & certifications", "career objective", "skills summary")
+    cover_letter_indicators = ("dear hiring manager", "dear hiring team", "i am writing to express", "i am applying for", "to whom it may concern")
     financial_core = ("invoice no", "amount due", "bill to", "tax invoice", "subtotal", "payment received", "ending balance", "net salary", "gross pay", "payslip")
-    if any(ind in normalized for ind in resume_indicators) and not any(fc in normalized for fc in financial_core):
-        raw_scores["other_document"] += 8.0
-        raw_scores["salary_slip"] = 0.0
-        raw_scores["invoice"] = 0.0
-        raw_scores["receipt"] = 0.0
+    is_cover_letter = any(ind in normalized for ind in cover_letter_indicators) and not any(fc in normalized for fc in financial_core)
+    is_resume = any(ind in normalized for ind in resume_indicators) and not any(fc in normalized for fc in financial_core)
+    if is_cover_letter:
+        raw_scores["cover_letter"] = raw_scores.get("cover_letter", 0.0) + 10.0
+        raw_scores["resume_cv"] = 0.0
+        for t in ("salary_slip", "invoice", "receipt", "other_document"):
+            raw_scores[t] = 0.0
+    elif is_resume:
+        raw_scores["resume_cv"] = raw_scores.get("resume_cv", 0.0) + 10.0
+        for t in ("salary_slip", "invoice", "receipt", "cover_letter", "other_document"):
+            raw_scores[t] = 0.0
 
     best_type = max(raw_scores, key=raw_scores.get)
     best_score = raw_scores[best_type]
@@ -205,12 +264,12 @@ def _heuristic_label_and_confidence(raw_text: str) -> tuple[str, str, float, dic
         is_financial = any(re.search(pat, normalized, re.IGNORECASE) for pat in financial_patterns)
         if is_financial:
             return "other_financial_document", "Financial", 0.50, raw_scores
-        return "other_document", "General", 0.50, raw_scores
+        return "other_document", "General & Miscellaneous", 0.50, raw_scores
 
     total_positive = sum(s for s in raw_scores.values() if s > 0)
     score_ratio = best_score / total_positive if total_positive > 0 else 0.5
     calibrated_confidence = round(min(0.98, max(0.68, 0.65 + 0.33 * score_ratio)), 4)
-    category = DOCUMENT_CATEGORY_MAP.get(best_type, "General")
+    category = DOCUMENT_CATEGORY_MAP.get(best_type, "General & Miscellaneous")
 
     return best_type, category, calibrated_confidence, raw_scores
 
@@ -312,19 +371,37 @@ def classify_document_result(raw_text: str) -> ClassificationResult:
                         for cls_name, prob in zip(classifier.classes_, probabilities)
                     }
 
-            # Guardrail: prevent non-financial documents (e.g., resumes, cover letters) from being misclassified as Financial
+            # Guardrail: prevent non-financial documents (resumes, cover letters) from being
+            # misclassified as Financial; also upgrade "other_document" to resume_cv/cover_letter
             normalized = cleaned.lower()
-            resume_markers = ("curriculum vitae", "resume", "professional summary", "work experience", "technical skills", "projects & certifications")
+            resume_markers = ("curriculum vitae", "resume", "professional summary", "work experience", "technical skills", "projects & certifications", "career objective", "skills summary")
+            cover_letter_markers = ("dear hiring manager", "dear hiring team", "i am writing to express", "i am applying for", "to whom it may concern")
             financial_core = ("invoice no", "amount due", "bill to", "tax invoice", "subtotal", "payment received", "ending balance", "net salary", "gross pay", "payslip")
-            if predicted_label in ("invoice", "receipt", "bank_statement", "salary_slip", "other_financial_document"):
-                if any(m in normalized for m in resume_markers) and not any(f in normalized for f in financial_core):
-                    predicted_label = "other_document"
-                    confidence = scores.get("other_document", 0.92)
+            has_resume = any(m in normalized for m in resume_markers)
+            has_cover_letter = any(m in normalized for m in cover_letter_markers)
+            has_financial = any(f in normalized for f in financial_core)
+            if not has_financial:
+                # Redirect ML misclassifications of financial type for resume content
+                if predicted_label in ("invoice", "receipt", "bank_statement", "salary_slip", "other_financial_document"):
+                    if has_cover_letter:
+                        predicted_label = "cover_letter"
+                        confidence = scores.get("cover_letter", 0.90)
+                    elif has_resume:
+                        predicted_label = "resume_cv"
+                        confidence = scores.get("resume_cv", 0.90)
+                # Upgrade other_document to specific Professional & Career subtype
+                elif predicted_label == "other_document":
+                    if has_cover_letter:
+                        predicted_label = "cover_letter"
+                        confidence = scores.get("cover_letter", 0.85)
+                    elif has_resume:
+                        predicted_label = "resume_cv"
+                        confidence = scores.get("resume_cv", 0.85)
 
             model_name = str(artifact.get("model_name", "tfidf-logistic-regression"))
             model_ver = str(artifact.get("model_version", "1.0.0"))
             full_model_tag = f"{model_name}:{model_ver}"
-            cat = DOCUMENT_CATEGORY_MAP.get(predicted_label, "General")
+            cat = DOCUMENT_CATEGORY_MAP.get(predicted_label, "General & Miscellaneous")
 
             return ClassificationResult(
                 document_type=predicted_label,
@@ -342,7 +419,7 @@ def classify_document_result(raw_text: str) -> ClassificationResult:
             pass
 
     heuristic, category, _, raw_scores = _heuristic_label_and_confidence(cleaned)
-    status = "fallback" if heuristic not in ("other_financial_document", "other_document") else "fallback_unmatched"
+    status = "fallback" if heuristic not in ("other_financial_document", "other_document", "resume_cv", "cover_letter", "job_description") else "fallback_unmatched"
     return ClassificationResult(
         document_type=heuristic,
         category=category,

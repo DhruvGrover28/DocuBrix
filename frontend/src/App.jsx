@@ -109,9 +109,17 @@ const statusColors = {
 }
 
 const categoryColors = {
+  // Current 8-category taxonomy
   Financial: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  Academic: 'bg-blue-50 text-blue-700 border-blue-200',
+  'Professional & Career': 'bg-cyan-50 text-cyan-700 border-cyan-200',
+  'Academic & Research': 'bg-blue-50 text-blue-700 border-blue-200',
   Legal: 'bg-purple-50 text-purple-700 border-purple-200',
+  'Medical & Healthcare': 'bg-rose-50 text-rose-700 border-rose-200',
+  'Business & Commercial': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  'Administrative & Identity': 'bg-amber-50 text-amber-700 border-amber-200',
+  'General & Miscellaneous': 'bg-slate-50 text-slate-700 border-slate-200',
+  // Legacy aliases for backward compatibility with existing stored documents
+  Academic: 'bg-blue-50 text-blue-700 border-blue-200',
   Medical: 'bg-rose-50 text-rose-700 border-rose-200',
   Administrative: 'bg-amber-50 text-amber-700 border-amber-200',
   General: 'bg-slate-50 text-slate-700 border-slate-200',
@@ -1500,7 +1508,11 @@ function ProcessingPage() {
                     .map(([key, value]) => (
                       <div key={key} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                         <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{key.replace(/_/g, ' ')}</div>
-                        <div className="mt-2 text-sm font-medium text-slate-900 break-words">{value || <span className="text-slate-400 font-normal italic">Not available</span>}</div>
+                        <div className="mt-2 text-sm font-medium text-slate-900 break-words">
+                          {Array.isArray(value)
+                            ? (value.length > 0 ? value.join(', ') : <span className="text-slate-400 font-normal italic">Not available</span>)
+                            : (value || <span className="text-slate-400 font-normal italic">Not available</span>)}
+                        </div>
                       </div>
                     ))}
                 </div>
@@ -2641,7 +2653,11 @@ function DocumentDetailPage() {
                 .map(([key, value]) => (
                   <div key={key} className="rounded-xl border border-slate-200 bg-slate-50 p-3 hover:border-slate-300 transition-colors">
                     <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{key.replace(/_/g, ' ')}</div>
-                    <div className="mt-1.5 text-sm font-semibold text-slate-900 break-words">{value || <span className="text-slate-400 font-normal italic">Not available</span>}</div>
+                    <div className="mt-1.5 text-sm font-semibold text-slate-900 break-words">
+                      {Array.isArray(value)
+                        ? (value.length > 0 ? value.join(', ') : <span className="text-slate-400 font-normal italic">Not available</span>)
+                        : (value || <span className="text-slate-400 font-normal italic">Not available</span>)}
+                    </div>
                   </div>
               ))}
             </div>

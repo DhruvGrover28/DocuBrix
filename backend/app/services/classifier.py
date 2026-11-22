@@ -22,6 +22,9 @@ DOCUMENT_CATEGORY_MAP: dict[str, str] = {
     # Academic & Research
     "academic_transcript": "Academic & Research",
     "academic_certificate": "Academic & Research",
+    "academic_research": "Academic & Research",
+    "study_material": "Academic & Research",
+    "course_material": "Academic & Research",
     # Legal
     "legal_contract": "Legal",
     "non_disclosure_agreement": "Legal",
@@ -137,6 +140,15 @@ MARKERS: dict[str, tuple[str, ...]] = {
         "reference no", "to all staff", "order no", "competent authority", "issued by",
         "gazette notification", "administrative order",
     ),
+    "academic_research": (
+        "study material", "study guide", "lecture notes", "course material", "course syllabus",
+        "syllabus", "curriculum", "unit 1", "unit 2", "unit 3", "unit 4", "chapter 1", "chapter 2",
+        "chapter 3", "learning objectives", "topics covered", "key concepts", "references", "reading list",
+        "research paper", "abstract", "methodology", "literature review", "conclusion",
+        "assignment", "homework", "problem set", "thesis", "dissertation", "laboratory manual",
+        "textbook", "professor", "instructor", "course code", "prerequisites", "exam questions",
+        "data structures", "algorithms", "software engineering", "computer science",
+    ),
     "resume_cv": (
         "curriculum vitae", "resume", "work experience", "professional summary",
         "technical skills", "projects & certifications", "references available",
@@ -176,6 +188,12 @@ ANCHORS: dict[str, list[str]] = {
     "medical_lab_report": [r"\b(?:lab(?:oratory)?\s*report|pathology|reference\s*(?:range|interval))\b"],
     "identity_document": [r"\b(?:identity\s*card|passport|driving\s*licen[sc]e|voter\s*id)\b", r"\bdate\s*of\s*birth\b"],
     "official_notice": [r"\b(?:office\s*memorandum|circular|official\s*notice)\b"],
+    "academic_research": [
+        r"\b(?:study\s*(?:material|guide|notes)|lecture\s*(?:notes|slides)|course\s*(?:material|syllabus|guide|notes))\b",
+        r"\b(?:unit\s*\d+|chapter\s*\d+|module\s*\d+|topics?\s*covered|learning\s*objectives|key\s*concepts)\b",
+        r"\b(?:research\s*paper|literature\s*review|methodology|abstract\b.*\bintroduction)\b",
+        r"\b(?:assignment\s*#?\d+|homework\s*#?\d+|problem\s*set|practice\s*problems)\b",
+    ],
     "resume_cv": [
         r"\b(?:curriculum\s*vitae|resume|c\.?v\.?)\b",
         r"\b(?:professional\s*summary|work\s*experience|technical\s*skills)\b",
@@ -249,6 +267,21 @@ def _heuristic_label_and_confidence(raw_text: str) -> tuple[str, str, float, dic
         raw_scores["resume_cv"] = raw_scores.get("resume_cv", 0.0) + 10.0
         for t in ("salary_slip", "invoice", "receipt", "cover_letter", "other_document"):
             raw_scores[t] = 0.0
+
+    # Disambiguate academic research / study material from job descriptions or memos
+    academic_study_markers = (
+        "study material", "study guide", "lecture notes", "course material", "course syllabus",
+        "syllabus", "learning objectives", "topics covered", "key concepts", "chapter 1", "chapter 2",
+        "chapter 3", "unit 1", "unit 2", "unit 3", "unit 4", "module 1", "module 2", "module 3",
+        "assignment", "homework", "problem set", "practice problems", "research paper", "literature review",
+    )
+    if any(m in normalized for m in academic_study_markers):
+        raw_scores["academic_research"] = raw_scores.get("academic_research", 0.0) + 14.0
+        raw_scores["job_description"] = 0.0
+        raw_scores["resume_cv"] = 0.0
+        raw_scores["salary_slip"] = 0.0
+        raw_scores["invoice"] = 0.0
+        raw_scores["receipt"] = 0.0
 
     best_type = max(raw_scores, key=raw_scores.get)
     best_score = raw_scores[best_type]
@@ -397,6 +430,34 @@ def classify_document_result(raw_text: str) -> ClassificationResult:
                     elif has_resume:
                         predicted_label = "resume_cv"
                         confidence = scores.get("resume_cv", 0.85)
+
+            # Guardrail: Prevent academic notes / study material from being misclassified as job_description
+            academic_study_indicators = (
+                "study material", "study guide", "lecture notes", "course material", "course syllabus",
+                "syllabus", "learning objectives", "topics covered", "key concepts", "chapter ", "unit ", "module ",
+                "assignment", "homework", "problem set", "practice problems", "research paper",
+                "course:", "course code", "textbook", "prerequisites", "lecture", "b.tech", "semester",
+                "data structures", "algorithms",
+            )
+            job_core_anchors = (
+                "we are hiring", "job description", "apply now", "equal opportunity employer",
+                "salary range", "submit your resume", "compensation range", "about the role",
+                "position summary", "responsibilities:", "qualifications:", "benefits:", "job title:",
+            )
+            if predicted_label == "job_description":
+                if any(ind in normalized for ind in academic_study_indicators) or not any(anc in normalized for anc in job_core_anchors):
+                    if any(ind in normalized for ind in academic_study_indicators):
+                        predicted_label = "academic_research"
+                        confidence = scores.get("academic_research", 0.88)
+
+            # Guardrail: Reconcile low-confidence ML predictions with strong heuristic anchors
+            h_type, h_cat, h_conf, h_scores = _heuristic_label_and_confidence(cleaned)
+            h_best_score = h_scores.get(h_type, 0.0)
+            pred_h_score = h_scores.get(predicted_label, 0.0)
+            if h_type != predicted_label and h_best_score >= 5.0 and h_best_score >= pred_h_score + 3.0:
+                if confidence is None or confidence < 0.40 or (h_best_score >= 8.0 and confidence < 0.60):
+                    predicted_label = h_type
+                    confidence = round(max(confidence or 0.5, h_conf), 4)
 
             model_name = str(artifact.get("model_name", "tfidf-logistic-regression"))
             model_ver = str(artifact.get("model_version", "1.0.0"))

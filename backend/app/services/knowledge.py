@@ -285,7 +285,9 @@ def build_gemini_prompt(question: str, sources: list[dict[str, Any]]) -> str:
 
 def generate_grounded_answer(question: str, sources: list[dict[str, Any]]) -> str:
     api_key = get_gemini_api_key()
-    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+    raw_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip()
+    # Normalize model names: gemini-3.8-flash does not exist in Google API; map to gemini-1.5-flash
+    model = "gemini-1.5-flash" if raw_model in ("gemini-3.8-flash", "gemini-pro-vision") or not raw_model else raw_model
     if not api_key:
         logger.error(
             "[Gemini Diagnostic] [missing_api_key] GEMINI_API_KEY environment variable is not configured."

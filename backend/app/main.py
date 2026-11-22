@@ -236,12 +236,14 @@ def register(payload: dict[str, Any]) -> dict[str, Any]:
     with SessionLocal() as session:
         if session.query(User).filter(User.email == email).first() is not None:
             raise HTTPException(status_code=409, detail="An account with this email already exists.")
+        is_first_user = session.query(User).filter(User.email != "demo@docubrix.io").count() == 0
+        assigned_role = "admin" if (ADMIN_EMAIL and email == ADMIN_EMAIL) or (not ADMIN_EMAIL and is_first_user) else "user"
         user = User(
             id=str(uuid.uuid4()),
             name=name,
             email=email,
             password_hash=hash_password(password),
-            role="admin" if ADMIN_EMAIL and email == ADMIN_EMAIL else "user",
+            role=assigned_role,
         )
         session.add(user)
         session.commit()
@@ -249,6 +251,21 @@ def register(payload: dict[str, Any]) -> dict[str, Any]:
         response_user = serialize_user(user)
         token = create_access_token(user.id, user.role, user.session_version)
     return {"access_token": token, "token_type": "bearer", "user": response_user}
+
+
+@app.post("/auth/claim-admin")
+def claim_admin(user: User = Depends(get_current_user)) -> dict[str, Any]:
+    with SessionLocal() as session:
+        real_admins = session.query(User).filter(User.role == "admin", User.email != "demo@docubrix.io").count()
+        if real_admins > 0 and user.role != "admin":
+            raise HTTPException(status_code=403, detail="An administrator account already exists.")
+        db_user = session.query(User).filter(User.id == user.id).first()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found.")
+        db_user.role = "admin"
+        session.commit()
+        token = create_access_token(db_user.id, db_user.role, db_user.session_version)
+        return {"status": "promoted", "user": serialize_user(db_user), "access_token": token}
 
 
 @app.post("/auth/login")
@@ -820,6 +837,12 @@ def ask_document(document_id: str, payload: dict[str, Any], user: User = Depends
         sources = rank_chunks_by_relevance(question, chunks, filename=document.filename, top_k=5)
 
     if not is_llm_configured():
+        if sources:
+            best_chunk = sources[0]["content"]
+            sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", best_chunk) if s.strip()]
+            summary_ans = " ".join(sentences[:3]) if sentences else best_chunk[:300]
+            answer = f"{summary_ans}\n\n*(Extracted directly from document content. Note: GEMINI_API_KEY is not configured on the backend for AI generation.)*"
+            return {"answer": answer, "sources": sources}
         raise HTTPException(
             status_code=503,
             detail="Grounded Q&A is unavailable because GEMINI_API_KEY is not configured.",
@@ -828,6 +851,12 @@ def ask_document(document_id: str, payload: dict[str, Any], user: User = Depends
     try:
         answer = generate_grounded_answer(question, sources)
     except RuntimeError as exc:
+        if sources:
+            best_chunk = sources[0]["content"]
+            sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", best_chunk) if s.strip()]
+            summary_ans = " ".join(sentences[:3]) if sentences else best_chunk[:300]
+            answer = f"{summary_ans}\n\n*(Extracted directly from document content. Note: LLM service reported: {str(exc)})*"
+            return {"answer": answer, "sources": sources}
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return {"answer": answer, "sources": sources}
@@ -1067,15 +1096,23 @@ def execute_queue_action(document_id: str, payload: dict[str, Any], user: User =
     if action not in valid_actions:
         raise HTTPException(status_code=400, detail=f"Invalid action. Expected one of: {', '.join(valid_actions)}")
 
-    if action in ("approve", "reject") and user.role != "admin":
-        raise HTTPException(
-            status_code=403,
-            detail="Administrator access is required to approve or reject documents in the review queue.",
-        )
-
     with SessionLocal() as session:
         document = document_query(session, user).filter(Document.id == document_id).first()
         if document is None:
+            raise HTTPException(status_code=404, detail="Document not found.")
+
+        # Restricted documents (high-value spend, compliance reviews, PHI) strictly require admin approval
+        restricted_statuses = {"pending_approval", "in_compliance_review", "secure_archived"}
+        extracted_data = document.extracted_json or {}
+        workflow_tags = set(extracted_data.get("workflow", {}).get("applied_tags", []))
+        restricted_tags = {"high_value_spend", "phi_confidential", "legal_audit"}
+        is_restricted = document.status in restricted_statuses or bool(workflow_tags & restricted_tags)
+
+        if action in ("approve", "reject") and is_restricted and user.role != "admin":
+            raise HTTPException(
+                status_code=403,
+                detail="Administrator access is required to approve or reject restricted documents in the review queue.",
+            )
             raise HTTPException(status_code=404, detail="Document not found.")
 
         status_mapping = {

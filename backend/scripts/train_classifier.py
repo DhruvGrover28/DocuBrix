@@ -31,6 +31,7 @@ SUPPORTED_LABELS: set[str] = {
     # Academic
     "academic_transcript",
     "academic_certificate",
+    "academic_research",
     # Legal
     "legal_contract",
     "non_disclosure_agreement",
@@ -492,6 +493,81 @@ def generate_synthetic_dataset(samples_per_class: int = 45) -> list[dict[str, st
             f"Equal Opportunity Employer. Apply Now at careers.{company.lower().replace(' ', '')}.com"
         )
         data.append({"text": text, "label": "job_description"})
+
+    # 13d. ACADEMIC RESEARCH & STUDY MATERIAL (Academic & Research)
+    academic_topics = [
+        ("Data Structures and Algorithms", "Binary Search Trees, Graph Traversal (DFS/BFS), and Dynamic Programming"),
+        ("Operating Systems Concepts", "Process Synchronization, Virtual Memory Paging, and Deadlock Prevention"),
+        ("Database Management Systems", "Relational Algebra, SQL Query Optimization, and ACID Transaction Properties"),
+        ("Computer Networks & Protocols", "OSI 7-Layer Model, TCP/IP Handshake, Subnetting, and Routing Algorithms"),
+        ("Software Engineering Principles", "Agile Scrum Methodologies, Software Testing Life Cycle, and Design Patterns"),
+        ("Artificial Intelligence & Machine Learning", "Gradient Descent, Neural Network Backpropagation, and Decision Trees"),
+    ]
+    for i in range(samples_per_class):
+        course, topics = rng.choice(academic_topics)
+        unit = rng.randint(1, 5)
+        prof = rng.choice(["Dr. H. V. Sharma", "Prof. Angela Davis", "Dr. Rajesh K. Gupta", "Prof. Elena Martinez", "Dr. Chen Wei"])
+        doc_kind = rng.choice(["study_guide", "research_paper", "syllabus", "assignment"])
+        if doc_kind == "study_guide":
+            text = (
+                f"{course.upper()} — COMPREHENSIVE STUDY MATERIAL & LECTURE NOTES\n"
+                f"Course Code: CS-{rng.randint(200, 499)} | Semester: {rng.choice(['III', 'IV', 'V', 'VI'])}\n"
+                f"Instructor: {prof} | Department of Computer Science & Engineering\n"
+                f"Unit {unit}: Core Concepts and Theoretical Overview\n\n"
+                f"Topics Covered:\n"
+                f"• {topics}\n"
+                f"• Theoretical Foundations and Complexity Analysis\n\n"
+                f"Key Concepts & Summary:\n"
+                f"Students are expected to master the algorithmic fundamentals, analyze time and space complexity, "
+                f"and solve practical programming exercises. Review lecture slides and supplementary reading material.\n\n"
+                f"Practice Problems & Review Questions:\n"
+                f"1. Explain the step-by-step execution for the primary algorithm.\n"
+                f"2. Derive asymptotic bounds (Big-O, Big-Omega, Big-Theta).\n"
+                f"Recommended Textbooks: Introduction to Algorithms (CLRS), Modern Operating Systems."
+            )
+        elif doc_kind == "research_paper":
+            text = (
+                f"RESEARCH PAPER / ACADEMIC PUBLICATION\n"
+                f"Title: Novel Approaches in {course}: An Empirical Investigation\n"
+                f"Authors: {prof}, Alex Rivera, Jordan Lee\n"
+                f"Department of Information Technology, Global Research University\n\n"
+                f"ABSTRACT\n"
+                f"This paper presents a formal analysis and benchmark comparison of modern algorithms in {course}. "
+                f"We conduct extensive experiments across distributed benchmarks, demonstrating a 22% improvement in throughput.\n\n"
+                f"1. INTRODUCTION & LITERATURE REVIEW\n"
+                f"Recent advances in distributed computing have underscored the necessity of robust computational models. "
+                f"Previous studies by Smith et al. (2024) highlighted architectural limitations in traditional approaches.\n\n"
+                f"2. METHODOLOGY & EXPERIMENTAL RESULTS\n"
+                f"We evaluate performance across synthetic and real-world datasets. Statistical analysis confirms significant gains.\n\n"
+                f"3. CONCLUSION & REFERENCES\n"
+                f"Our findings establish new guidelines for scalable system implementation. References: [1] IEEE Trans. 2025."
+            )
+        elif doc_kind == "syllabus":
+            text = (
+                f"ACADEMIC COURSE SYLLABUS & CURRICULUM GUIDE\n"
+                f"Subject: {course} | Academic Year: 2026-2027\n"
+                f"Course Instructor: {prof} | Office Hours: Mon/Wed 2-4 PM\n"
+                f"Prerequisites: Basic Mathematics and Introductory Programming\n\n"
+                f"Course Objectives & Learning Outcomes:\n"
+                f"By the conclusion of this course, students will be capable of designing, analyzing, and implementing {topics}.\n\n"
+                f"Module Breakdown:\n"
+                f"Module 1: Fundamental Principles and Mathematical Preliminaries\n"
+                f"Module 2: Advanced Data Structures and Algorithmic Techniques\n"
+                f"Module 3: Experimental Analysis and Project Implementation\n\n"
+                f"Grading Policy: Midterm Exam 30%, Final Examination 40%, Lab Assignments 30%."
+            )
+        else:
+            text = (
+                f"COURSEWORK ASSIGNMENT & PROBLEM SET #{rng.randint(1, 6)}\n"
+                f"Course: {course} | Faculty: {prof}\n"
+                f"Due Date: October {rng.randint(10, 28)}, 2026 | Total Points: 100\n\n"
+                f"Instructions: Submit your typed solutions through the student portal by 11:59 PM. "
+                f"Late submissions are subject to a 10% penalty per calendar day.\n\n"
+                f"Problem 1 (25 pts): Formulate the mathematical recurrence relation for the given divide-and-conquer strategy.\n"
+                f"Problem 2 (35 pts): Design an algorithm to solve {topics.split(',')[0]} in O(N log N) time complexity.\n"
+                f"Problem 3 (40 pts): Implement the solution in Python or C++ and attach unit test outputs."
+            )
+        data.append({"text": text, "label": "academic_research"})
 
     # 13d. OTHER DOCUMENT (General memos, notes, general correspondence)
     for i in range(samples_per_class):

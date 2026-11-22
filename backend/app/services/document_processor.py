@@ -435,6 +435,27 @@ def extract_domain_fields(raw_text: str, document_type: str | None = None) -> di
             "document_date": primary_date or "",
         })
 
+    elif norm_type in ("academic_research", "study_material", "course_material"):
+        subject_course = _match_first(r"(?:course|subject|title)\s*[:\-]?\s*([^\n\r]+)", text)
+        if not subject_course:
+            for line in text.splitlines()[:4]:
+                line = line.strip()
+                if len(line) > 5 and not line.startswith("http"):
+                    subject_course = line
+                    break
+        instructor = _clean_person_name(_match_first(r"(?:instructor|professor|author|faculty|dr\.)\s*[:\-]?\s*([^\n\r]+)", text))
+        unit_module = _match_first(r"(unit\s*\d+|chapter\s*\d+|module\s*\d+)", text)
+        topics = _match_first(r"(?:topics\s*covered|key\s*concepts|contents?)\s*[:\-]?\s*\n+([^\n]+)", text)
+
+        field_map.update({
+            "subject_course": subject_course or "",
+            "document_title": subject_course or "Academic Study Material",
+            "instructor_author": instructor or "",
+            "unit_module": unit_module or "",
+            "topics_covered": topics or "",
+            "document_date": primary_date or "",
+        })
+
     # 3. LEGAL DOCUMENTS
     elif norm_type in ("legal_contract", "non_disclosure_agreement"):
         contract_title = _match_first(r"^([A-Z0-9\s\-]{4,50}(?:AGREEMENT|CONTRACT|DEED|MEMORANDUM))\b", text) or ("Non-Disclosure Agreement" if norm_type == "non_disclosure_agreement" else "Legal Agreement")
@@ -736,6 +757,12 @@ def validate_extracted_fields(document_type: str, extracted: dict[str, Any]) -> 
             checks[field] = present
             if not present:
                 warnings.append(f"Incomplete academic record: missing {field}")
+
+    elif document_type in ("academic_research", "study_material", "course_material"):
+        checks["has_course_content"] = bool(extracted.get("subject_course") or extracted.get("document_title"))
+        checks["document_date"] = bool(extracted.get("document_date"))
+        if not checks["has_course_content"]:
+            warnings.append("Academic document: could not identify subject or course title.")
 
     elif document_type in ("legal_contract", "non_disclosure_agreement"):
         for field in ["party_one", "party_two", "effective_date"]:

@@ -143,14 +143,14 @@ def test_generate_grounded_answer_model_urls(monkeypatch: pytest.MonkeyPatch) ->
         ans = generate_grounded_answer("Question?", sources)
         assert ans == "Answer from default model."
         req = mock_urlopen.call_args[0][0]
-        assert "models/gemini-3.8-flash:generateContent" in req.full_url
+        assert "models/gemini-1.5-flash:generateContent" in req.full_url
 
     # Test override with custom model
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash-lite")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-1.5-pro")
     with patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen:
         generate_grounded_answer("Question?", sources)
         req2 = mock_urlopen.call_args[0][0]
-        assert "models/gemini-3.8-flash-lite:generateContent" in req2.full_url
+        assert "models/gemini-1.5-pro:generateContent" in req2.full_url
 
 
 def test_gemini_api_key_cleaning_and_headers(monkeypatch: pytest.MonkeyPatch) -> None:

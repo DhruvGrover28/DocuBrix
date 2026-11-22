@@ -74,6 +74,14 @@ export async function updateCurrentUser(payload) {
   return response.data.user
 }
 
+export async function claimAdminRole() {
+  const response = await api.post('/auth/claim-admin')
+  if (response.data.access_token) {
+    localStorage.setItem(AUTH_TOKEN_KEY, response.data.access_token)
+  }
+  return response.data.user
+}
+
 export async function fetchHealth() {
   const response = await api.get('/health')
   return response.data
